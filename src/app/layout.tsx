@@ -1,8 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Suspense } from "react";
 import { Toaster } from "sonner";
-
-import { AppActivityTracker } from "@/components/app-activity-tracker";
 
 import "./globals.css";
 
@@ -36,9 +33,6 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased">
-        <Suspense fallback={null}>
-          <AppActivityTracker />
-        </Suspense>
         {children}
         <Toaster richColors position="bottom-right" closeButton />
       </body>

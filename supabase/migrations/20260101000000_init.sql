@@ -338,33 +338,6 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
--- Name: _meeting_started_at_backfill_20260413; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public._meeting_started_at_backfill_20260413 (
-    meeting_id uuid NOT NULL,
-    original_started_at timestamp with time zone NOT NULL,
-    original_created_at timestamp with time zone NOT NULL,
-    backed_up_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
--- Name: agent_memories; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.agent_memories (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    user_auth_uid uuid NOT NULL,
-    namespace text NOT NULL,
-    key text NOT NULL,
-    value jsonb DEFAULT '{}'::jsonb NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
 -- Name: api_keys; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -432,106 +405,6 @@ CREATE SEQUENCE public.app_users_id_seq
 --
 
 ALTER SEQUENCE public.app_users_id_seq OWNED BY public.app_users.id;
-
-
---
--- Name: chat_usage_logs; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.chat_usage_logs (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    user_auth_uid uuid NOT NULL,
-    user_message text NOT NULL,
-    assistant_message text,
-    model text DEFAULT 'claude-sonnet-4-6'::text NOT NULL,
-    input_tokens integer DEFAULT 0 NOT NULL,
-    output_tokens integer DEFAULT 0 NOT NULL,
-    input_cost numeric(10,6) DEFAULT 0 NOT NULL,
-    output_cost numeric(10,6) DEFAULT 0 NOT NULL,
-    total_cost numeric(10,6) DEFAULT 0 NOT NULL,
-    tool_calls_count integer DEFAULT 0 NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    source text DEFAULT 'chat'::text NOT NULL
-);
-
-
---
--- Name: contract_audit_logs; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.contract_audit_logs (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    contract_id uuid NOT NULL,
-    action text NOT NULL,
-    actor_type text DEFAULT 'system'::text NOT NULL,
-    actor_id text,
-    actor_name text,
-    actor_email text,
-    ip_address text,
-    user_agent text,
-    details jsonb,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT contract_audit_logs_actor_type_check CHECK ((actor_type = ANY (ARRAY['internal'::text, 'customer'::text, 'system'::text])))
-);
-
-
---
--- Name: contract_templates; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.contract_templates (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    name text NOT NULL,
-    description text,
-    title_template text DEFAULT '{{contract_title}}'::text NOT NULL,
-    body_template text DEFAULT '{{contract_body}}'::text NOT NULL,
-    default_variables jsonb DEFAULT '{}'::jsonb NOT NULL,
-    owner_auth_uid uuid,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
--- Name: contracts; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.contracts (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    template_id uuid,
-    customer_id uuid,
-    project_id uuid,
-    title text NOT NULL,
-    content text NOT NULL,
-    variables jsonb DEFAULT '{}'::jsonb NOT NULL,
-    status text DEFAULT '작성중'::text NOT NULL,
-    customer_name text,
-    customer_phone text,
-    customer_email text,
-    owner_auth_uid uuid,
-    owner_name text,
-    owner_email text,
-    internal_sign_type text,
-    internal_signer_name text,
-    internal_signature_data text,
-    internal_signed_at timestamp with time zone,
-    customer_sign_type text,
-    customer_signer_name text,
-    customer_signature_data text,
-    customer_signed_at timestamp with time zone,
-    sign_token text,
-    sign_requested_at timestamp with time zone,
-    completed_at timestamp with time zone,
-    pdf_file_name text,
-    pdf_size_bytes integer,
-    pdf_sha256 text,
-    pdf_generated_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT contracts_customer_sign_type_check CHECK ((customer_sign_type = ANY (ARRAY['서명'::text, '도장'::text]))),
-    CONSTRAINT contracts_internal_sign_type_check CHECK ((internal_sign_type = ANY (ARRAY['서명'::text, '도장'::text]))),
-    CONSTRAINT contracts_status_check CHECK ((status = ANY (ARRAY['작성중'::text, '발송완료'::text, '완료'::text, '취소'::text])))
-);
 
 
 --
@@ -747,25 +620,6 @@ CREATE TABLE public.gemini_usage_logs (
 
 
 --
--- Name: google_calendar_sync_states; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.google_calendar_sync_states (
-    calendar_id text NOT NULL,
-    sync_token text,
-    channel_id text,
-    channel_resource_id text,
-    channel_token text,
-    channel_expiration timestamp with time zone,
-    last_synced_at timestamp with time zone,
-    last_message_number bigint,
-    created_by uuid,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
 -- Name: google_oauth_tokens; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -779,21 +633,6 @@ CREATE TABLE public.google_oauth_tokens (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     is_global boolean DEFAULT false NOT NULL
-);
-
-
---
--- Name: lead_comments; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.lead_comments (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    lead_id uuid NOT NULL,
-    author_employee_id uuid,
-    author_name text NOT NULL,
-    content text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT lead_comments_content_check CHECK ((char_length(btrim(content)) > 0))
 );
 
 
@@ -1146,131 +985,6 @@ COMMENT ON COLUMN public.schedules.recurrence_group_id IS '같은 반복 규칙�
 
 
 --
--- Name: settlement_data; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.settlement_data (
-    id bigint NOT NULL,
-    filename text NOT NULL,
-    data jsonb NOT NULL,
-    uploaded_by uuid,
-    created_at timestamp with time zone DEFAULT now()
-);
-
-
---
--- Name: settlement_data_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.settlement_data_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: settlement_data_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.settlement_data_id_seq OWNED BY public.settlement_data.id;
-
-
---
--- Name: slack_pending_actions; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.slack_pending_actions (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    slack_user_id text NOT NULL,
-    user_auth_uid uuid NOT NULL,
-    channel text NOT NULL,
-    thread_ts text NOT NULL,
-    confirmation_ts text NOT NULL,
-    tool_name text NOT NULL,
-    tool_input jsonb NOT NULL,
-    summary text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    expires_at timestamp with time zone DEFAULT (now() + '00:15:00'::interval) NOT NULL,
-    executed_at timestamp with time zone,
-    cancelled_at timestamp with time zone
-);
-
-
---
--- Name: sms_logs; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.sms_logs (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    expense_id uuid,
-    customer_id uuid,
-    template_code text,
-    to_phone text NOT NULL,
-    body text NOT NULL,
-    status text DEFAULT 'queued'::text NOT NULL,
-    provider text,
-    provider_msg_id text,
-    error text,
-    sent_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT sms_logs_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'sent'::text, 'failed'::text])))
-);
-
-
---
--- Name: sms_templates; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.sms_templates (
-    code text NOT NULL,
-    body text NOT NULL,
-    vars jsonb DEFAULT '[]'::jsonb NOT NULL,
-    description text,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
--- Name: suggestion_comments; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.suggestion_comments (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    suggestion_id uuid NOT NULL,
-    author_employee_id uuid,
-    author_name text NOT NULL,
-    content text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    comment_type text DEFAULT 'comment'::text NOT NULL,
-    status_from text,
-    status_to text,
-    CONSTRAINT suggestion_comments_comment_type_check CHECK ((comment_type = ANY (ARRAY['comment'::text, 'status_change'::text]))),
-    CONSTRAINT suggestion_comments_content_check CHECK ((char_length(btrim(content)) > 0))
-);
-
-
---
--- Name: suggestion_posts; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.suggestion_posts (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    title text NOT NULL,
-    content text NOT NULL,
-    author_employee_id uuid,
-    author_name text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    status text DEFAULT '대기중'::text NOT NULL,
-    CONSTRAINT suggestion_posts_content_check CHECK ((char_length(btrim(content)) > 0)),
-    CONSTRAINT suggestion_posts_status_check CHECK ((status = ANY (ARRAY['대기중'::text, '검토중'::text, '개선중'::text, '개선완료'::text, '반려'::text]))),
-    CONSTRAINT suggestion_posts_title_check CHECK ((char_length(btrim(title)) > 0))
-);
-
-
---
 -- Name: system_settings; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1322,75 +1036,10 @@ CREATE TABLE public.tasks (
 
 
 --
--- Name: weekly_meeting_comments; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.weekly_meeting_comments (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    weekly_meeting_id uuid NOT NULL,
-    author_employee_id uuid,
-    author_name text NOT NULL,
-    content text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT weekly_meeting_comments_content_check CHECK ((char_length(btrim(content)) > 0))
-);
-
-
---
--- Name: weekly_meetings; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.weekly_meetings (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    week_start_date date NOT NULL,
-    progress_this_week text NOT NULL,
-    plans_next_week text NOT NULL,
-    blockers text DEFAULT ''::text NOT NULL,
-    author_employee_id uuid,
-    author_name text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT weekly_meetings_plans_next_week_check CHECK ((char_length(btrim(plans_next_week)) > 0)),
-    CONSTRAINT weekly_meetings_progress_this_week_check CHECK ((char_length(btrim(progress_this_week)) > 0))
-);
-
-
---
 -- Name: app_users id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.app_users ALTER COLUMN id SET DEFAULT nextval('public.app_users_id_seq'::regclass);
-
-
---
--- Name: settlement_data id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.settlement_data ALTER COLUMN id SET DEFAULT nextval('public.settlement_data_id_seq'::regclass);
-
-
---
--- Name: _meeting_started_at_backfill_20260413 _meeting_started_at_backfill_20260413_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public._meeting_started_at_backfill_20260413
-    ADD CONSTRAINT _meeting_started_at_backfill_20260413_pkey PRIMARY KEY (meeting_id);
-
-
---
--- Name: agent_memories agent_memories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.agent_memories
-    ADD CONSTRAINT agent_memories_pkey PRIMARY KEY (id);
-
-
---
--- Name: agent_memories agent_memories_user_auth_uid_namespace_key_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.agent_memories
-    ADD CONSTRAINT agent_memories_user_auth_uid_namespace_key_key UNIQUE (user_auth_uid, namespace, key);
 
 
 --
@@ -1431,38 +1080,6 @@ ALTER TABLE ONLY public.app_users
 
 ALTER TABLE ONLY public.app_users
     ADD CONSTRAINT app_users_user_id_key UNIQUE (user_id);
-
-
---
--- Name: chat_usage_logs chat_usage_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.chat_usage_logs
-    ADD CONSTRAINT chat_usage_logs_pkey PRIMARY KEY (id);
-
-
---
--- Name: contract_audit_logs contract_audit_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.contract_audit_logs
-    ADD CONSTRAINT contract_audit_logs_pkey PRIMARY KEY (id);
-
-
---
--- Name: contract_templates contract_templates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.contract_templates
-    ADD CONSTRAINT contract_templates_pkey PRIMARY KEY (id);
-
-
---
--- Name: contracts contracts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.contracts
-    ADD CONSTRAINT contracts_pkey PRIMARY KEY (id);
 
 
 --
@@ -1562,14 +1179,6 @@ ALTER TABLE ONLY public.gemini_usage_logs
 
 
 --
--- Name: google_calendar_sync_states google_calendar_sync_states_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.google_calendar_sync_states
-    ADD CONSTRAINT google_calendar_sync_states_pkey PRIMARY KEY (calendar_id);
-
-
---
 -- Name: google_oauth_tokens google_oauth_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1583,14 +1192,6 @@ ALTER TABLE ONLY public.google_oauth_tokens
 
 ALTER TABLE ONLY public.google_oauth_tokens
     ADD CONSTRAINT google_oauth_tokens_user_id_key UNIQUE (user_id);
-
-
---
--- Name: lead_comments lead_comments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.lead_comments
-    ADD CONSTRAINT lead_comments_pkey PRIMARY KEY (id);
 
 
 --
@@ -1754,54 +1355,6 @@ ALTER TABLE ONLY public.schedules
 
 
 --
--- Name: settlement_data settlement_data_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.settlement_data
-    ADD CONSTRAINT settlement_data_pkey PRIMARY KEY (id);
-
-
---
--- Name: slack_pending_actions slack_pending_actions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.slack_pending_actions
-    ADD CONSTRAINT slack_pending_actions_pkey PRIMARY KEY (id);
-
-
---
--- Name: sms_logs sms_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.sms_logs
-    ADD CONSTRAINT sms_logs_pkey PRIMARY KEY (id);
-
-
---
--- Name: sms_templates sms_templates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.sms_templates
-    ADD CONSTRAINT sms_templates_pkey PRIMARY KEY (code);
-
-
---
--- Name: suggestion_comments suggestion_comments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.suggestion_comments
-    ADD CONSTRAINT suggestion_comments_pkey PRIMARY KEY (id);
-
-
---
--- Name: suggestion_posts suggestion_posts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.suggestion_posts
-    ADD CONSTRAINT suggestion_posts_pkey PRIMARY KEY (id);
-
-
---
 -- Name: system_settings system_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1834,29 +1387,6 @@ ALTER TABLE ONLY public.tasks
 
 
 --
--- Name: weekly_meeting_comments weekly_meeting_comments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.weekly_meeting_comments
-    ADD CONSTRAINT weekly_meeting_comments_pkey PRIMARY KEY (id);
-
-
---
--- Name: weekly_meetings weekly_meetings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.weekly_meetings
-    ADD CONSTRAINT weekly_meetings_pkey PRIMARY KEY (id);
-
-
---
--- Name: idx_agent_memories_user_namespace; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_agent_memories_user_namespace ON public.agent_memories USING btree (user_auth_uid, namespace);
-
-
---
 -- Name: idx_api_keys_name_active; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1875,62 +1405,6 @@ CREATE INDEX idx_app_logs_created_at ON public.app_logs USING btree (created_at 
 --
 
 CREATE INDEX idx_app_logs_level ON public.app_logs USING btree (level);
-
-
---
--- Name: idx_chat_usage_logs_created; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_chat_usage_logs_created ON public.chat_usage_logs USING btree (created_at DESC);
-
-
---
--- Name: idx_chat_usage_logs_source; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_chat_usage_logs_source ON public.chat_usage_logs USING btree (source);
-
-
---
--- Name: idx_chat_usage_logs_user; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_chat_usage_logs_user ON public.chat_usage_logs USING btree (user_auth_uid);
-
-
---
--- Name: idx_contract_audit_logs_contract_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_contract_audit_logs_contract_id ON public.contract_audit_logs USING btree (contract_id);
-
-
---
--- Name: idx_contract_audit_logs_created_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_contract_audit_logs_created_at ON public.contract_audit_logs USING btree (created_at DESC);
-
-
---
--- Name: idx_contracts_customer_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_contracts_customer_id ON public.contracts USING btree (customer_id);
-
-
---
--- Name: idx_contracts_sign_token; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_contracts_sign_token ON public.contracts USING btree (sign_token) WHERE (sign_token IS NOT NULL);
-
-
---
--- Name: idx_contracts_status; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_contracts_status ON public.contracts USING btree (status);
 
 
 --
@@ -2064,13 +1538,6 @@ CREATE INDEX idx_gemini_usage_logs_user ON public.gemini_usage_logs USING btree 
 --
 
 CREATE UNIQUE INDEX idx_google_oauth_tokens_one_global ON public.google_oauth_tokens USING btree (is_global) WHERE (is_global = true);
-
-
---
--- Name: idx_lead_comments_lead_id_created_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_lead_comments_lead_id_created_at ON public.lead_comments USING btree (lead_id, created_at DESC);
 
 
 --
@@ -2347,41 +1814,6 @@ CREATE INDEX idx_schedules_start_at ON public.schedules USING btree (start_at);
 
 
 --
--- Name: idx_sms_logs_created_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_sms_logs_created_at ON public.sms_logs USING btree (created_at DESC);
-
-
---
--- Name: idx_sms_logs_customer_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_sms_logs_customer_id ON public.sms_logs USING btree (customer_id);
-
-
---
--- Name: idx_sms_logs_expense_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_sms_logs_expense_id ON public.sms_logs USING btree (expense_id);
-
-
---
--- Name: idx_suggestion_comments_suggestion_id_created_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_suggestion_comments_suggestion_id_created_at ON public.suggestion_comments USING btree (suggestion_id, created_at DESC);
-
-
---
--- Name: idx_suggestion_posts_created_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_suggestion_posts_created_at ON public.suggestion_posts USING btree (created_at DESC);
-
-
---
 -- Name: idx_task_assignees_employee_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2431,48 +1863,6 @@ CREATE INDEX idx_tasks_started_at ON public.tasks USING btree (started_at) WHERE
 
 
 --
--- Name: idx_weekly_meeting_comments_meeting_created; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_weekly_meeting_comments_meeting_created ON public.weekly_meeting_comments USING btree (weekly_meeting_id, created_at);
-
-
---
--- Name: idx_weekly_meetings_week_start_date; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_weekly_meetings_week_start_date ON public.weekly_meetings USING btree (week_start_date DESC);
-
-
---
--- Name: slack_pending_actions_confirmation_ts_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX slack_pending_actions_confirmation_ts_idx ON public.slack_pending_actions USING btree (confirmation_ts);
-
-
---
--- Name: slack_pending_actions_expires_at_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX slack_pending_actions_expires_at_idx ON public.slack_pending_actions USING btree (expires_at) WHERE ((executed_at IS NULL) AND (cancelled_at IS NULL));
-
-
---
--- Name: ux_weekly_meetings_week_author; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX ux_weekly_meetings_week_author ON public.weekly_meetings USING btree (week_start_date, author_employee_id) WHERE (author_employee_id IS NOT NULL);
-
-
---
--- Name: agent_memories agent_memories_updated_at; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER agent_memories_updated_at BEFORE UPDATE ON public.agent_memories FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
-
-
---
 -- Name: api_keys api_keys_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -2498,13 +1888,6 @@ CREATE TRIGGER customers_updated_at BEFORE UPDATE ON public.customers FOR EACH R
 --
 
 CREATE TRIGGER employees_updated_at BEFORE UPDATE ON public.employees FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
-
-
---
--- Name: google_calendar_sync_states google_calendar_sync_states_updated_at; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER google_calendar_sync_states_updated_at BEFORE UPDATE ON public.google_calendar_sync_states FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
 
 
 --
@@ -2547,20 +1930,6 @@ CREATE TRIGGER schedules_reset_slack_reminder_sent_at BEFORE UPDATE ON public.sc
 --
 
 CREATE TRIGGER schedules_updated_at BEFORE UPDATE ON public.schedules FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
-
-
---
--- Name: contract_templates set_contract_templates_updated_at; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER set_contract_templates_updated_at BEFORE UPDATE ON public.contract_templates FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
-
---
--- Name: contracts set_contracts_updated_at; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER set_contracts_updated_at BEFORE UPDATE ON public.contracts FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
 --
@@ -2620,20 +1989,6 @@ CREATE TRIGGER set_recurring_expenses_updated_at BEFORE UPDATE ON public.recurri
 
 
 --
--- Name: sms_templates sms_templates_updated_at; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER sms_templates_updated_at BEFORE UPDATE ON public.sms_templates FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
-
-
---
--- Name: suggestion_posts suggestion_posts_updated_at; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER suggestion_posts_updated_at BEFORE UPDATE ON public.suggestion_posts FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
-
-
---
 -- Name: deposits sync_revenue_paid_from_deposit; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -2655,58 +2010,11 @@ CREATE TRIGGER trg_google_oauth_tokens_updated_at BEFORE UPDATE ON public.google
 
 
 --
--- Name: weekly_meetings weekly_meetings_updated_at; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER weekly_meetings_updated_at BEFORE UPDATE ON public.weekly_meetings FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
-
-
---
--- Name: _meeting_started_at_backfill_20260413 _meeting_started_at_backfill_20260413_meeting_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public._meeting_started_at_backfill_20260413
-    ADD CONSTRAINT _meeting_started_at_backfill_20260413_meeting_id_fkey FOREIGN KEY (meeting_id) REFERENCES public.meetings(id) ON DELETE CASCADE;
-
-
---
 -- Name: app_users app_users_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.app_users
     ADD CONSTRAINT app_users_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id);
-
-
---
--- Name: contract_audit_logs contract_audit_logs_contract_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.contract_audit_logs
-    ADD CONSTRAINT contract_audit_logs_contract_id_fkey FOREIGN KEY (contract_id) REFERENCES public.contracts(id) ON DELETE CASCADE;
-
-
---
--- Name: contracts contracts_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.contracts
-    ADD CONSTRAINT contracts_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE SET NULL;
-
-
---
--- Name: contracts contracts_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.contracts
-    ADD CONSTRAINT contracts_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE SET NULL;
-
-
---
--- Name: contracts contracts_template_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.contracts
-    ADD CONSTRAINT contracts_template_id_fkey FOREIGN KEY (template_id) REFERENCES public.contract_templates(id) ON DELETE SET NULL;
 
 
 --
@@ -2822,35 +2130,11 @@ ALTER TABLE ONLY public.expenses
 
 
 --
--- Name: google_calendar_sync_states google_calendar_sync_states_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.google_calendar_sync_states
-    ADD CONSTRAINT google_calendar_sync_states_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
-
-
---
 -- Name: google_oauth_tokens google_oauth_tokens_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.google_oauth_tokens
     ADD CONSTRAINT google_oauth_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
-
-
---
--- Name: lead_comments lead_comments_author_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.lead_comments
-    ADD CONSTRAINT lead_comments_author_employee_id_fkey FOREIGN KEY (author_employee_id) REFERENCES public.employees(id) ON DELETE SET NULL;
-
-
---
--- Name: lead_comments lead_comments_lead_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.lead_comments
-    ADD CONSTRAINT lead_comments_lead_id_fkey FOREIGN KEY (lead_id) REFERENCES public.leads(id) ON DELETE CASCADE;
 
 
 --
@@ -3078,62 +2362,6 @@ ALTER TABLE ONLY public.schedules
 
 
 --
--- Name: settlement_data settlement_data_uploaded_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.settlement_data
-    ADD CONSTRAINT settlement_data_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES auth.users(id);
-
-
---
--- Name: sms_logs sms_logs_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.sms_logs
-    ADD CONSTRAINT sms_logs_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE SET NULL;
-
-
---
--- Name: sms_logs sms_logs_expense_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.sms_logs
-    ADD CONSTRAINT sms_logs_expense_id_fkey FOREIGN KEY (expense_id) REFERENCES public.expenses(id) ON DELETE SET NULL;
-
-
---
--- Name: sms_logs sms_logs_template_code_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.sms_logs
-    ADD CONSTRAINT sms_logs_template_code_fkey FOREIGN KEY (template_code) REFERENCES public.sms_templates(code) ON DELETE SET NULL;
-
-
---
--- Name: suggestion_comments suggestion_comments_author_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.suggestion_comments
-    ADD CONSTRAINT suggestion_comments_author_employee_id_fkey FOREIGN KEY (author_employee_id) REFERENCES public.employees(id) ON DELETE SET NULL;
-
-
---
--- Name: suggestion_comments suggestion_comments_suggestion_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.suggestion_comments
-    ADD CONSTRAINT suggestion_comments_suggestion_id_fkey FOREIGN KEY (suggestion_id) REFERENCES public.suggestion_posts(id) ON DELETE CASCADE;
-
-
---
--- Name: suggestion_posts suggestion_posts_author_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.suggestion_posts
-    ADD CONSTRAINT suggestion_posts_author_employee_id_fkey FOREIGN KEY (author_employee_id) REFERENCES public.employees(id) ON DELETE SET NULL;
-
-
---
 -- Name: task_assignees task_assignees_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3171,55 +2399,6 @@ ALTER TABLE ONLY public.tasks
 
 ALTER TABLE ONLY public.tasks
     ADD CONSTRAINT tasks_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE SET NULL;
-
-
---
--- Name: weekly_meeting_comments weekly_meeting_comments_author_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.weekly_meeting_comments
-    ADD CONSTRAINT weekly_meeting_comments_author_employee_id_fkey FOREIGN KEY (author_employee_id) REFERENCES public.employees(id) ON DELETE SET NULL;
-
-
---
--- Name: weekly_meeting_comments weekly_meeting_comments_weekly_meeting_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.weekly_meeting_comments
-    ADD CONSTRAINT weekly_meeting_comments_weekly_meeting_id_fkey FOREIGN KEY (weekly_meeting_id) REFERENCES public.weekly_meetings(id) ON DELETE CASCADE;
-
-
---
--- Name: weekly_meetings weekly_meetings_author_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.weekly_meetings
-    ADD CONSTRAINT weekly_meetings_author_employee_id_fkey FOREIGN KEY (author_employee_id) REFERENCES public.employees(id) ON DELETE SET NULL;
-
-
---
--- Name: settlement_data Admin can delete; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Admin can delete" ON public.settlement_data FOR DELETE TO authenticated USING ((EXISTS ( SELECT 1
-   FROM public.app_users
-  WHERE ((app_users.user_id = auth.uid()) AND (app_users.role = 'admin'::text)))));
-
-
---
--- Name: settlement_data Admin can insert; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Admin can insert" ON public.settlement_data FOR INSERT TO authenticated WITH CHECK ((EXISTS ( SELECT 1
-   FROM public.app_users
-  WHERE ((app_users.user_id = auth.uid()) AND (app_users.role = 'admin'::text)))));
-
-
---
--- Name: settlement_data Authenticated can read; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated can read" ON public.settlement_data FOR SELECT TO authenticated USING (true);
 
 
 --
@@ -3269,20 +2448,6 @@ CREATE POLICY "Authenticated users can delete expense_types" ON public.expense_t
 --
 
 CREATE POLICY "Authenticated users can delete expenses" ON public.expenses FOR DELETE TO authenticated USING (true);
-
-
---
--- Name: google_calendar_sync_states Authenticated users can delete google calendar sync states; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can delete google calendar sync states" ON public.google_calendar_sync_states FOR DELETE USING ((auth.role() = 'authenticated'::text));
-
-
---
--- Name: lead_comments Authenticated users can delete lead comments; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can delete lead comments" ON public.lead_comments FOR DELETE TO authenticated USING (true);
 
 
 --
@@ -3356,20 +2521,6 @@ CREATE POLICY "Authenticated users can delete schedules" ON public.schedules FOR
 
 
 --
--- Name: suggestion_comments Authenticated users can delete suggestion comments; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can delete suggestion comments" ON public.suggestion_comments FOR DELETE TO authenticated USING (true);
-
-
---
--- Name: suggestion_posts Authenticated users can delete suggestion posts; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can delete suggestion posts" ON public.suggestion_posts FOR DELETE TO authenticated USING (true);
-
-
---
 -- Name: task_assignees Authenticated users can delete task_assignees; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3377,31 +2528,10 @@ CREATE POLICY "Authenticated users can delete task_assignees" ON public.task_ass
 
 
 --
--- Name: weekly_meeting_comments Authenticated users can delete weekly_meeting_comments; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can delete weekly_meeting_comments" ON public.weekly_meeting_comments FOR DELETE TO authenticated USING (true);
-
-
---
--- Name: weekly_meetings Authenticated users can delete weekly_meetings; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can delete weekly_meetings" ON public.weekly_meetings FOR DELETE TO authenticated USING (true);
-
-
---
 -- Name: api_keys Authenticated users can insert api_keys; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY "Authenticated users can insert api_keys" ON public.api_keys FOR INSERT WITH CHECK ((auth.role() = 'authenticated'::text));
-
-
---
--- Name: contract_audit_logs Authenticated users can insert contract_audit_logs; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can insert contract_audit_logs" ON public.contract_audit_logs FOR INSERT TO authenticated WITH CHECK (true);
 
 
 --
@@ -3454,20 +2584,6 @@ CREATE POLICY "Authenticated users can insert expenses" ON public.expenses FOR I
 
 
 --
--- Name: google_calendar_sync_states Authenticated users can insert google calendar sync states; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can insert google calendar sync states" ON public.google_calendar_sync_states FOR INSERT WITH CHECK ((auth.role() = 'authenticated'::text));
-
-
---
--- Name: lead_comments Authenticated users can insert lead comments; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can insert lead comments" ON public.lead_comments FOR INSERT TO authenticated WITH CHECK (true);
-
-
---
 -- Name: leads Authenticated users can insert leads; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3479,13 +2595,6 @@ CREATE POLICY "Authenticated users can insert leads" ON public.leads FOR INSERT 
 --
 
 CREATE POLICY "Authenticated users can insert meetings" ON public.meetings FOR INSERT WITH CHECK ((auth.role() = 'authenticated'::text));
-
-
---
--- Name: chat_usage_logs Authenticated users can insert own chat usage logs; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can insert own chat usage logs" ON public.chat_usage_logs FOR INSERT TO authenticated WITH CHECK ((auth.uid() = user_auth_uid));
 
 
 --
@@ -3552,59 +2661,10 @@ CREATE POLICY "Authenticated users can insert schedules" ON public.schedules FOR
 
 
 --
--- Name: sms_logs Authenticated users can insert sms_logs; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can insert sms_logs" ON public.sms_logs FOR INSERT TO authenticated WITH CHECK (true);
-
-
---
--- Name: suggestion_comments Authenticated users can insert suggestion comments; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can insert suggestion comments" ON public.suggestion_comments FOR INSERT TO authenticated WITH CHECK (true);
-
-
---
--- Name: suggestion_posts Authenticated users can insert suggestion posts; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can insert suggestion posts" ON public.suggestion_posts FOR INSERT TO authenticated WITH CHECK (true);
-
-
---
 -- Name: task_assignees Authenticated users can insert task_assignees; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY "Authenticated users can insert task_assignees" ON public.task_assignees FOR INSERT WITH CHECK ((auth.role() = 'authenticated'::text));
-
-
---
--- Name: weekly_meeting_comments Authenticated users can insert weekly_meeting_comments; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can insert weekly_meeting_comments" ON public.weekly_meeting_comments FOR INSERT TO authenticated WITH CHECK (true);
-
-
---
--- Name: weekly_meetings Authenticated users can insert weekly_meetings; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can insert weekly_meetings" ON public.weekly_meetings FOR INSERT TO authenticated WITH CHECK (true);
-
-
---
--- Name: contract_templates Authenticated users can manage contract_templates; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can manage contract_templates" ON public.contract_templates TO authenticated USING (true) WITH CHECK (true);
-
-
---
--- Name: contracts Authenticated users can manage contracts; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can manage contracts" ON public.contracts TO authenticated USING (true) WITH CHECK (true);
 
 
 --
@@ -3636,24 +2696,10 @@ CREATE POLICY "Authenticated users can manage schedule_categories" ON public.sch
 
 
 --
--- Name: sms_templates Authenticated users can manage sms_templates; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can manage sms_templates" ON public.sms_templates TO authenticated USING (true) WITH CHECK (true);
-
-
---
 -- Name: tasks Authenticated users can manage tasks; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY "Authenticated users can manage tasks" ON public.tasks TO authenticated USING (true) WITH CHECK (true);
-
-
---
--- Name: chat_usage_logs Authenticated users can read all chat usage logs; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can read all chat usage logs" ON public.chat_usage_logs FOR SELECT TO authenticated USING (true);
 
 
 --
@@ -3692,13 +2738,6 @@ CREATE POLICY "Authenticated users can read expenses" ON public.expenses FOR SEL
 
 
 --
--- Name: agent_memories Authenticated users can read own agent memories; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can read own agent memories" ON public.agent_memories FOR SELECT TO authenticated USING ((auth.uid() = user_auth_uid));
-
-
---
 -- Name: project_types Authenticated users can read project_types; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3720,13 +2759,6 @@ CREATE POLICY "Authenticated users can read schedule_categories" ON public.sched
 
 
 --
--- Name: sms_logs Authenticated users can read sms_logs; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can read sms_logs" ON public.sms_logs FOR SELECT TO authenticated USING (true);
-
-
---
 -- Name: system_settings Authenticated users can read system settings; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3734,24 +2766,10 @@ CREATE POLICY "Authenticated users can read system settings" ON public.system_se
 
 
 --
--- Name: contract_audit_logs Authenticated users can select contract_audit_logs; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can select contract_audit_logs" ON public.contract_audit_logs FOR SELECT TO authenticated USING (true);
-
-
---
 -- Name: customer_notes Authenticated users can select customer notes; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY "Authenticated users can select customer notes" ON public.customer_notes FOR SELECT TO authenticated USING (true);
-
-
---
--- Name: lead_comments Authenticated users can select lead comments; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can select lead comments" ON public.lead_comments FOR SELECT TO authenticated USING (true);
 
 
 --
@@ -3766,34 +2784,6 @@ CREATE POLICY "Authenticated users can select leads" ON public.leads FOR SELECT 
 --
 
 CREATE POLICY "Authenticated users can select project notes" ON public.project_notes FOR SELECT TO authenticated USING (true);
-
-
---
--- Name: suggestion_comments Authenticated users can select suggestion comments; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can select suggestion comments" ON public.suggestion_comments FOR SELECT TO authenticated USING (true);
-
-
---
--- Name: suggestion_posts Authenticated users can select suggestion posts; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can select suggestion posts" ON public.suggestion_posts FOR SELECT TO authenticated USING (true);
-
-
---
--- Name: weekly_meeting_comments Authenticated users can select weekly_meeting_comments; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can select weekly_meeting_comments" ON public.weekly_meeting_comments FOR SELECT TO authenticated USING (true);
-
-
---
--- Name: weekly_meetings Authenticated users can select weekly_meetings; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can select weekly_meetings" ON public.weekly_meetings FOR SELECT TO authenticated USING (true);
 
 
 --
@@ -3843,20 +2833,6 @@ CREATE POLICY "Authenticated users can update expense_types" ON public.expense_t
 --
 
 CREATE POLICY "Authenticated users can update expenses" ON public.expenses FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
-
-
---
--- Name: google_calendar_sync_states Authenticated users can update google calendar sync states; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can update google calendar sync states" ON public.google_calendar_sync_states FOR UPDATE USING ((auth.role() = 'authenticated'::text));
-
-
---
--- Name: lead_comments Authenticated users can update lead comments; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can update lead comments" ON public.lead_comments FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
 
 --
@@ -3930,38 +2906,10 @@ CREATE POLICY "Authenticated users can update schedules" ON public.schedules FOR
 
 
 --
--- Name: suggestion_comments Authenticated users can update suggestion comments; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can update suggestion comments" ON public.suggestion_comments FOR UPDATE TO authenticated USING (true);
-
-
---
--- Name: suggestion_posts Authenticated users can update suggestion posts; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can update suggestion posts" ON public.suggestion_posts FOR UPDATE TO authenticated USING (true);
-
-
---
 -- Name: task_assignees Authenticated users can update task_assignees; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY "Authenticated users can update task_assignees" ON public.task_assignees FOR UPDATE USING ((auth.role() = 'authenticated'::text));
-
-
---
--- Name: weekly_meeting_comments Authenticated users can update weekly_meeting_comments; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can update weekly_meeting_comments" ON public.weekly_meeting_comments FOR UPDATE TO authenticated USING (true);
-
-
---
--- Name: weekly_meetings Authenticated users can update weekly_meetings; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can update weekly_meetings" ON public.weekly_meetings FOR UPDATE TO authenticated USING (true);
 
 
 --
@@ -3990,13 +2938,6 @@ CREATE POLICY "Authenticated users can view customers" ON public.customers FOR S
 --
 
 CREATE POLICY "Authenticated users can view employees" ON public.employees FOR SELECT USING ((auth.role() = 'authenticated'::text));
-
-
---
--- Name: google_calendar_sync_states Authenticated users can view google calendar sync states; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can view google calendar sync states" ON public.google_calendar_sync_states FOR SELECT USING ((auth.role() = 'authenticated'::text));
 
 
 --
@@ -4049,20 +2990,6 @@ CREATE POLICY "Authenticated users can view task_assignees" ON public.task_assig
 
 
 --
--- Name: agent_memories Authenticated users can write own agent memories; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can write own agent memories" ON public.agent_memories TO authenticated USING ((auth.uid() = user_auth_uid)) WITH CHECK ((auth.uid() = user_auth_uid));
-
-
---
--- Name: _meeting_started_at_backfill_20260413 No app access to meeting started_at backfill backup; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "No app access to meeting started_at backfill backup" ON public._meeting_started_at_backfill_20260413 TO authenticated, anon USING (false) WITH CHECK (false);
-
-
---
 -- Name: deposits Service role full access on deposits; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -4091,37 +3018,11 @@ CREATE POLICY "Service role full access on recurring_expenses" ON public.recurri
 
 
 --
--- Name: sms_logs Service role full access on sms_logs; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Service role full access on sms_logs" ON public.sms_logs TO service_role USING (true) WITH CHECK (true);
-
-
---
--- Name: sms_templates Service role full access on sms_templates; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Service role full access on sms_templates" ON public.sms_templates TO service_role USING (true) WITH CHECK (true);
-
-
---
 -- Name: app_users Users can read own role; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY "Users can read own role" ON public.app_users FOR SELECT TO authenticated USING (true);
 
-
---
--- Name: _meeting_started_at_backfill_20260413; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public._meeting_started_at_backfill_20260413 ENABLE ROW LEVEL SECURITY;
-
---
--- Name: agent_memories; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.agent_memories ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: api_keys; Type: ROW SECURITY; Schema: public; Owner: -
@@ -4243,49 +3144,6 @@ ALTER TABLE public.schedule_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.schedules ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: slack_pending_actions service_role manages slack_pending_actions; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "service_role manages slack_pending_actions" ON public.slack_pending_actions TO service_role USING (true) WITH CHECK (true);
-
-
---
--- Name: settlement_data; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.settlement_data ENABLE ROW LEVEL SECURITY;
-
---
--- Name: slack_pending_actions; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.slack_pending_actions ENABLE ROW LEVEL SECURITY;
-
---
--- Name: sms_logs; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.sms_logs ENABLE ROW LEVEL SECURITY;
-
---
--- Name: sms_templates; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.sms_templates ENABLE ROW LEVEL SECURITY;
-
---
--- Name: suggestion_comments; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.suggestion_comments ENABLE ROW LEVEL SECURITY;
-
---
--- Name: suggestion_posts; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.suggestion_posts ENABLE ROW LEVEL SECURITY;
-
---
 -- Name: system_settings; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4302,18 +3160,6 @@ ALTER TABLE public.task_assignees ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
-
---
--- Name: weekly_meeting_comments; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.weekly_meeting_comments ENABLE ROW LEVEL SECURITY;
-
---
--- Name: weekly_meetings; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.weekly_meetings ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: google_oauth_tokens 토큰 삭제; Type: POLICY; Schema: public; Owner: -
@@ -4431,22 +3277,6 @@ GRANT ALL ON FUNCTION public.update_updated_at_column() TO service_role;
 
 
 --
--- Name: TABLE _meeting_started_at_backfill_20260413; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public._meeting_started_at_backfill_20260413 TO service_role;
-
-
---
--- Name: TABLE agent_memories; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.agent_memories TO anon;
-GRANT ALL ON TABLE public.agent_memories TO authenticated;
-GRANT ALL ON TABLE public.agent_memories TO service_role;
-
-
---
 -- Name: TABLE api_keys; Type: ACL; Schema: public; Owner: -
 --
 
@@ -4480,42 +3310,6 @@ GRANT ALL ON TABLE public.app_users TO service_role;
 GRANT ALL ON SEQUENCE public.app_users_id_seq TO anon;
 GRANT ALL ON SEQUENCE public.app_users_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.app_users_id_seq TO service_role;
-
-
---
--- Name: TABLE chat_usage_logs; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.chat_usage_logs TO anon;
-GRANT ALL ON TABLE public.chat_usage_logs TO authenticated;
-GRANT ALL ON TABLE public.chat_usage_logs TO service_role;
-
-
---
--- Name: TABLE contract_audit_logs; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.contract_audit_logs TO anon;
-GRANT ALL ON TABLE public.contract_audit_logs TO authenticated;
-GRANT ALL ON TABLE public.contract_audit_logs TO service_role;
-
-
---
--- Name: TABLE contract_templates; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.contract_templates TO anon;
-GRANT ALL ON TABLE public.contract_templates TO authenticated;
-GRANT ALL ON TABLE public.contract_templates TO service_role;
-
-
---
--- Name: TABLE contracts; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.contracts TO anon;
-GRANT ALL ON TABLE public.contracts TO authenticated;
-GRANT ALL ON TABLE public.contracts TO service_role;
 
 
 --
@@ -4600,30 +3394,12 @@ GRANT ALL ON TABLE public.gemini_usage_logs TO service_role;
 
 
 --
--- Name: TABLE google_calendar_sync_states; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.google_calendar_sync_states TO anon;
-GRANT ALL ON TABLE public.google_calendar_sync_states TO authenticated;
-GRANT ALL ON TABLE public.google_calendar_sync_states TO service_role;
-
-
---
 -- Name: TABLE google_oauth_tokens; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON TABLE public.google_oauth_tokens TO anon;
 GRANT ALL ON TABLE public.google_oauth_tokens TO authenticated;
 GRANT ALL ON TABLE public.google_oauth_tokens TO service_role;
-
-
---
--- Name: TABLE lead_comments; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.lead_comments TO anon;
-GRANT ALL ON TABLE public.lead_comments TO authenticated;
-GRANT ALL ON TABLE public.lead_comments TO service_role;
 
 
 --
@@ -4753,69 +3529,6 @@ GRANT ALL ON TABLE public.schedules TO service_role;
 
 
 --
--- Name: TABLE settlement_data; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.settlement_data TO anon;
-GRANT ALL ON TABLE public.settlement_data TO authenticated;
-GRANT ALL ON TABLE public.settlement_data TO service_role;
-
-
---
--- Name: SEQUENCE settlement_data_id_seq; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON SEQUENCE public.settlement_data_id_seq TO anon;
-GRANT ALL ON SEQUENCE public.settlement_data_id_seq TO authenticated;
-GRANT ALL ON SEQUENCE public.settlement_data_id_seq TO service_role;
-
-
---
--- Name: TABLE slack_pending_actions; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.slack_pending_actions TO anon;
-GRANT ALL ON TABLE public.slack_pending_actions TO authenticated;
-GRANT ALL ON TABLE public.slack_pending_actions TO service_role;
-
-
---
--- Name: TABLE sms_logs; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.sms_logs TO anon;
-GRANT ALL ON TABLE public.sms_logs TO authenticated;
-GRANT ALL ON TABLE public.sms_logs TO service_role;
-
-
---
--- Name: TABLE sms_templates; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.sms_templates TO anon;
-GRANT ALL ON TABLE public.sms_templates TO authenticated;
-GRANT ALL ON TABLE public.sms_templates TO service_role;
-
-
---
--- Name: TABLE suggestion_comments; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.suggestion_comments TO anon;
-GRANT ALL ON TABLE public.suggestion_comments TO authenticated;
-GRANT ALL ON TABLE public.suggestion_comments TO service_role;
-
-
---
--- Name: TABLE suggestion_posts; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.suggestion_posts TO anon;
-GRANT ALL ON TABLE public.suggestion_posts TO authenticated;
-GRANT ALL ON TABLE public.suggestion_posts TO service_role;
-
-
---
 -- Name: TABLE system_settings; Type: ACL; Schema: public; Owner: -
 --
 
@@ -4840,24 +3553,6 @@ GRANT ALL ON TABLE public.task_assignees TO service_role;
 GRANT ALL ON TABLE public.tasks TO anon;
 GRANT ALL ON TABLE public.tasks TO authenticated;
 GRANT ALL ON TABLE public.tasks TO service_role;
-
-
---
--- Name: TABLE weekly_meeting_comments; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.weekly_meeting_comments TO anon;
-GRANT ALL ON TABLE public.weekly_meeting_comments TO authenticated;
-GRANT ALL ON TABLE public.weekly_meeting_comments TO service_role;
-
-
---
--- Name: TABLE weekly_meetings; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.weekly_meetings TO anon;
-GRANT ALL ON TABLE public.weekly_meetings TO authenticated;
-GRANT ALL ON TABLE public.weekly_meetings TO service_role;
 
 
 --
