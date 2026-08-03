@@ -4,10 +4,6 @@
     {
       "path": "/api/cron/slack-daily-schedule",
       "schedule": "0 22 * * *"
-    },
-    {
-      "path": "/api/cron/slack-schedule-reminder",
-      "schedule": "* * * * *"
     }
   ]
 }

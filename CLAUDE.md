@@ -45,19 +45,23 @@
 > **핵심 방침:** 대시보드에서 키를 손으로 복사하게 하지 않는다. **supabase CLI 로 로그인→프로젝트 생성→키 조회까지
 > 자동화**해서, 사용자는 브라우저 로그인과 DB 비밀번호 입력만 하면 되게 한다. 이것이 가장 빠른 설치 경로다.
 
-0. **환경 부트스트랩 (필수 프로그램 확인·설치)** — 윤비서 실행에 필요한 3가지: **git**(코드 받기),
-   **Node.js 20.9 이상 + npm**(빌드·실행), **supabase CLI**(DB). 먼저 한 번에 점검한다:
-   `git --version`, `node -v`, `npm -v`, `supabase --version`. 없는 것만 OS 에 맞춰 깐다.
+0. **환경 부트스트랩 (필수 프로그램 확인·설치)** — 이 과정은 **CLI-first** 다: GitHub·Supabase·Vercel 을
+   전부 CLI 로 다루므로 처음에 5가지를 한 번에 깐다: **git**(코드 받기), **Node.js 20.9 이상 + npm**(빌드·실행),
+   **GitHub CLI(gh)**(내 저장소 생성·push), **supabase CLI**(DB), **vercel CLI**(배포). 먼저 한 번에 점검한다:
+   `git --version`, `node -v`, `npm -v`, `gh --version`, `supabase --version`, `vercel --version`. 없는 것만 OS 에 맞춰 깐다.
    - **Windows** (대부분 `winget` 사용 가능):
      - git: `winget install --id Git.Git -e`
-     - Node LTS: `winget install --id OpenJS.NodeJS.LTS -e`  ← Node 가 npm·supabase CLI 의 전제
+     - Node LTS: `winget install --id OpenJS.NodeJS.LTS -e`  ← Node 가 npm·supabase/vercel CLI 의 전제
+     - GitHub CLI: `winget install --id GitHub.cli -e`
      - (winget 자체가 없으면 https://nodejs.org LTS, https://git-scm.com 설치파일 안내)
    - **macOS**:
      - git: `git --version` 을 한 번 실행하면 Xcode Command Line Tools 설치창이 뜬다(또는 `xcode-select --install`).
      - Node LTS: Homebrew 가 있으면 `brew install node`, 없으면 https://nodejs.org LTS 설치파일 안내.
-   - **supabase CLI** (git·Node 가 준비된 뒤): `npm install -g supabase` — **Windows/macOS 모두 동작**한다.
-     (macOS 는 `brew install supabase/tap/supabase` 도 가능.) 이 흐름은 CLI 로 프로젝트 생성·키 조회까지
-     자동화하므로 CLI 설치가 **필수**다.
+     - GitHub CLI: `brew install gh` (Homebrew 없으면 https://cli.github.com 설치파일).
+   - **supabase CLI + vercel CLI** (git·Node 가 준비된 뒤): `npm install -g supabase vercel` —
+     **Windows/macOS 모두 동작**한다. (macOS 는 `brew install supabase/tap/supabase` 도 가능.)
+     이 흐름은 CLI 로 저장소 생성·프로젝트 생성·키 조회·배포까지 자동화하므로 CLI 설치가 **필수**다.
+   - 사용자가 "로컬 실행만 빠르게" 원하면 gh·vercel 은 건너뛰어도 된다(각각 내 저장소 단계·배포 단계에서 다시 안내).
    - git·Node 설치는 승인 팝업/마법사가 뜰 수 있다 → `!` 로 명령을 띄우고 사용자가 완료하게 한 뒤 버전을 재확인한다.
    - **설치 직후 `--version` 으로 인식되는지 꼭 확인한다.** Windows 에서 방금 깐 supabase 가 `command not found`/
      `인식되지 않습니다` 로 안 잡히면 PATH 미갱신 문제다 → **재시작 시키지 말고, 네가 `npm prefix -g` 로 경로를 찾아
@@ -66,6 +70,15 @@
 1. **코드 받기 (URL 만 받은 경우)** — 사용자가 폴더를 안 열고 GitHub 주소만 줬다면 먼저 클론한다:
    `git clone https://github.com/youn-yong-seung/yunbiseo-template.git my-secretary` 후 그 폴더로 이동한다.
    이미 이 폴더가 열려 있으면(= `package.json` 이 보이면) 이 단계는 건너뛴다. 이어서 `npm install` 을 실행한다.
+1-2. **내 GitHub 저장소 만들기 (권장, 건너뛰기 가능)** — 커스텀 내역을 백업하고 과제 인증·Vercel 연동에 쓸
+   **사용자 소유 비공개 저장소**를 만든다. 순서:
+   - `gh auth status` 로 로그인 확인. 미로그인이면 **사용자가 새 터미널에서 `gh auth login` 을 직접 실행**하게
+     안내한다(브라우저 인증 — `supabase login` 과 같은 이유로 `!` 비대화형에서 돌리면 안 된다.
+     프롬프트는 GitHub.com → HTTPS → Login with a web browser 선택 안내).
+   - 로그인 확인 후 **네가 직접** 실행한다: `git remote rename origin template` →
+     `gh repo create <폴더명> --private --source=. --push`. 이름 충돌 시 다른 이름을 제안한다.
+   - 완료 후 origin=내 저장소, template=원본임을 알려주고, 이후 작업 커밋은 `git push` 로 백업됨을 안내한다.
+   - 사용자가 원치 않거나 GitHub 계정이 없으면 건너뛴다(나중에 "내 GitHub 저장소 만들어줘" 로 재개).
 2. **Supabase 로그인 (사용자가 새 터미널에서 직접)** — **`!` 로 시키지 말고**, 사용자에게
    **"새 터미널(또는 cmd)을 열어 `supabase login` 을 직접 실행"** 하라고 안내한다. 브라우저가 열려 인증하면
    토큰이 자동 저장된다(대시보드 접속·키 복사 불필요). ⚠️ `! supabase login`(비대화형)으로 하면 브라우저 대신
@@ -101,6 +114,33 @@
    로그인 직후 **왼쪽 사이드바 맨 아래 '내 이름' 클릭 → 마이페이지(`/dashboard/my`)에서 비밀번호를 꼭 바꾸라고** 안내한다.
 8. **완료** — 축하 인사와 함께, 회사정보·외부연동(Gemini/Bolta/Slack)은 **선택(심화)** 이며
    `SETUP.md` 6장 또는 [시스템설정] 화면에서 나중에 켤 수 있다고 알린다.
+   인터넷 배포를 원하면 **"배포해줘"** 라고 하면 된다고 안내한다(아래 배포 도우미).
+
+---
+
+## 🚀 배포 도우미 (Vercel)
+
+**트리거:** "배포해줘", "배포하고 싶어", "vercel 배포", "인터넷에 올려줘", `/deploy` → 아래 절차를 진행한다.
+로컬 설치(위 초기 설정)가 끝난 상태를 전제로 한다.
+
+1. **로그인 확인** — `vercel whoami` 실행. 미로그인이면 **사용자가 새 터미널에서 `vercel login` 을 직접 실행**하게
+   안내한다(브라우저 인증 — `supabase login`/`gh auth login` 과 같은 이유로 `!` 비대화형 금지).
+2. **비밀번호 점검** — 기본 비밀번호(`jadong!`)를 아직 쓰는지 물어본다. 배포하면 URL 을 아는 누구나 로그인
+   화면에 접근하므로, 기본값이면 **배포 전에 마이페이지에서 변경**하도록 안내한다(강제는 아님).
+3. **프로젝트 연결** — `vercel link --yes` 를 네가 실행한다(첫 실행 시 폴더명으로 프로젝트 자동 생성).
+4. **환경변수 등록** — `.env.local` 에서 값을 읽어 **네가 직접** 등록한다. 값은 채팅에 출력하지 않는다:
+   `printf '%s' "<값>" | vercel env add <KEY> production` 방식(비대화형)으로
+   `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` /
+   `NEXT_PUBLIC_AUTH_EMAIL_DOMAIN` 4개를 넣는다. 이미 존재하는 키는 `vercel env rm <KEY> production -y` 후 재등록.
+   (`.env.local` 에 Gemini 등 선택 키가 채워져 있으면 함께 등록할지 물어본다.)
+5. **배포** — `vercel deploy --prod --yes` 를 실행하고 출력된 프로덕션 URL 을 확인한다.
+   빌드 실패 시 로그를 읽고 원인(대부분 env 누락)을 고쳐 재배포한다.
+6. **검증·마무리** — 배포 URL 을 `curl` 로 200 확인 후 사용자에게 알린다. 함께 안내할 것:
+   - 로컬과 배포본은 **같은 Supabase DB** 를 본다(데이터 동일).
+   - 코드 수정 후엔 "다시 배포해줘" 한마디면 된다(`vercel deploy --prod --yes`).
+   - Slack 웹훅 등 콜백을 쓰면 `NEXT_PUBLIC_APP_URL` 을 배포 URL 로 추가 등록 후 재배포.
+   - 기본 크론(매일 Slack 일정 알림)은 Hobby 플랜에서 동작하며 `CRON_SECRET` 등록이 필요하다.
+     분 단위 리마인더·반복매입 크론은 Pro 플랜에서 `vercel.json` 의 `crons` 에 추가한다.
 
 ### 자주 나는 문제
 - **`supabase` 가 방금 설치했는데 `command not found`/`인식되지 않습니다`(특히 Windows)** →
@@ -115,6 +155,12 @@
 - `npm run build` 실패 → `.env.local` 의 Supabase 값(URL/anon/service_role)이 채워졌는지 확인 (빌드에 필요).
 - `setup:admin` 이 비밀번호 길이 오류 → 비밀번호는 **6자 이상**이어야 한다(Supabase Auth 기본 정책).
 - 로그인 안 됨 → ① 이메일이 아니라 **ID(`admin`)** 로 시도했는지 확인, ② `npm run setup:admin -- admin <새비밀번호>` 로 재설정.
+- **`gh auth login`/`vercel login` 이 브라우저를 안 열고 코드/토큰을 요구** → 비대화형(`!`)에서 돌려서다.
+  supabase 와 동일하게 **사용자가 새 터미널에서 직접** 실행하게 한다. (`gh` 는 device code 가 떠도 브라우저에서
+  코드 입력으로 진행 가능하니, 뜨면 그 코드를 안내한다.)
+- `gh repo create` 가 "Name already exists" → 다른 저장소 이름을 제안해 재시도.
+- `vercel env add` 가 값 입력 프롬프트에서 멈춤 → 대화형이라서다. `printf '%s' "<값>" | vercel env add <KEY> production` 으로 파이프해 비대화형으로 실행한다.
+- Vercel 배포는 됐는데 화면이 에러 → 환경변수 4개가 production 에 등록됐는지 `vercel env ls` 로 확인 후 재배포.
 
 ---
 

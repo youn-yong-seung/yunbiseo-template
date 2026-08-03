@@ -27,8 +27,12 @@
 
 ## 빠른 시작
 
+모든 과정이 **CLI-first** 입니다 — GitHub·Supabase·Vercel 을 전부 명령줄로 다루고, Claude Code 가 대신 실행해 줍니다.
+
 ```bash
 npm install
+gh auth login                   # (권장) GitHub 로그인 → 내 비공개 저장소 만들기
+git remote rename origin template && gh repo create my-secretary --private --source=. --push
 supabase login                  # 브라우저 인증 (대시보드 키 복사 불필요)
 supabase projects create "yun-secretary" --org-id <org> --db-password <pw> --region ap-northeast-2
 cp .env.example .env.local
@@ -39,6 +43,9 @@ npm run dev                     # http://localhost:3000  (admin / jadong! 로 �
 ```
 
 > 로그인 후 **사이드바 하단 '내 이름' → 마이페이지**에서 비밀번호를 꼭 바꾸세요.
+
+인터넷 배포까지 원하면 Claude Code 에게 **"배포해줘"** (또는 `/deploy`) — `vercel login` 한 번이면
+프로젝트 생성·환경변수 등록·배포를 알아서 진행합니다.
 
 자세한 내용은 **[SETUP.md](./SETUP.md)** 참고.
 

@@ -6,13 +6,19 @@
 ## 전체 흐름 한눈에
 
 ```
-0. 필요한 프로그램 설치 (git · Node.js · Supabase CLI)
-1. 코드 받기 (git clone) + npm install
+0. 필요한 프로그램 설치 (git · Node.js · GitHub CLI · Supabase CLI · Vercel CLI)
+1. 코드 받기 (git clone) + npm install + 내 GitHub 저장소 만들기 (gh)
 2. Supabase 로그인 → 프로젝트 만들기
 3. 키 조회 → .env.local 작성 → DB 테이블 생성 (db push)
 4. 첫 관리자 계정 만들기 (setup:admin)   ← 회원가입 화면이 없으므로 이 단계로 로그인 계정을 만듭니다
 5. 실행 (npm run dev) → http://localhost:3000 로그인
+6. (선택) 외부 연동 켜기
+7. (선택) Vercel 로 인터넷에 배포
 ```
+
+> 💡 **왜 CLI 를 먼저 다 깔까요?** GitHub·Supabase·Vercel 은 전부 CLI(명령줄 도구)를 제공합니다.
+> 처음에 CLI 3종을 설치해 두면 저장소 생성 → DB 프로젝트 생성·연결 → 배포까지 **전 과정을
+> 브라우저 대시보드 없이 명령으로** 끝낼 수 있고, Claude Code 가 이 명령들을 대신 실행해 줍니다.
 
 ---
 
@@ -36,18 +42,23 @@
 
 ---
 
-## 0. 필요한 프로그램 (3가지)
+## 0. 필요한 프로그램 (5가지)
 
 | 필요한 것 | Windows | macOS |
 |-----------|---------|-------|
 | **git** (코드 받기) | `winget install --id Git.Git -e` | `git --version` 실행 → 설치창 뜨면 진행 (또는 `xcode-select --install`) |
 | **Node.js 20.9+** (빌드·실행) | `winget install --id OpenJS.NodeJS.LTS -e` | `brew install node` / 없으면 [nodejs.org](https://nodejs.org) LTS |
+| **GitHub CLI** (내 저장소 만들기) | `winget install --id GitHub.cli -e` | `brew install gh` |
 | **Supabase CLI** (DB) | `npm install -g supabase` | `npm install -g supabase` (또는 `brew install supabase/tap/supabase`) |
+| **Vercel CLI** (인터넷 배포) | `npm install -g vercel` | `npm install -g vercel` |
 
-- 잘 깔렸는지 확인: `git --version`, `node -v`(v20.9 이상), `supabase --version` 이 모두 버전을 출력하면 OK.
+- 잘 깔렸는지 확인: `git --version`, `node -v`(v20.9 이상), `gh --version`, `supabase --version`, `vercel --version` 이 모두 버전을 출력하면 OK.
 - `winget` 이 없으면(구형 Windows) [nodejs.org](https://nodejs.org)·[git-scm.com](https://git-scm.com) 에서 설치파일로 받으세요.
-- Supabase CLI 는 **Node 를 먼저 깐 뒤** 설치됩니다(`npm` 이 필요).
-- **Supabase 계정**(무료)도 필요합니다 → https://supabase.com 에서 가입 (로그인은 2단계에서 CLI 가 처리).
+- Supabase CLI 와 Vercel CLI 는 **Node 를 먼저 깐 뒤** 설치됩니다(`npm` 이 필요).
+- 계정 3개(모두 무료)가 필요합니다: **GitHub**(github.com) · **Supabase**(supabase.com) · **Vercel**(vercel.com, GitHub 계정으로 가입 가능).
+  각 로그인은 필요한 단계에서 CLI 가 브라우저를 열어 처리합니다.
+- 최소한으로 가려면 git·Node·Supabase CLI 3개만으로도 **로컬 실행까지는** 됩니다.
+  GitHub CLI 는 내 저장소 백업·과제 인증(1단계), Vercel CLI 는 배포(7단계)에 쓰입니다.
 
 > 💡 git·Node 설치는 승인 팝업(Windows UAC)이나 설치 마법사가 떠서 **클릭 한두 번은 직접** 해야 합니다.
 
@@ -71,7 +82,7 @@
 
 ---
 
-## 1. 코드 받기 & 패키지 설치
+## 1. 코드 받기 & 내 저장소 만들기
 
 ```bash
 git clone https://github.com/youn-yong-seung/yunbiseo-template.git my-secretary
@@ -80,6 +91,25 @@ npm install
 ```
 
 > 이후 모든 명령은 **이 `my-secretary` 폴더 안에서** 실행합니다.
+
+이어서 **내 GitHub 저장소(비공개)로 연결**합니다. 앞으로 커스텀한 내용을 커밋·백업하고,
+과제 인증이나 Vercel 연동에도 쓰는 내 소유 저장소입니다.
+
+```bash
+# 1) GitHub 로그인 (처음 한 번, 브라우저가 열립니다 — 일반 터미널에서 실행)
+gh auth login
+
+# 2) 원본 템플릿 리모트는 'template' 라는 이름으로 남겨두고
+git remote rename origin template
+
+# 3) 내 계정에 비공개 저장소를 만들고 코드를 올립니다 (origin = 내 저장소)
+gh repo create my-secretary --private --source=. --push
+```
+
+> - 이후 커밋은 `git push` 만 하면 **내 저장소**로 올라갑니다.
+> - 원본 템플릿이 업데이트되면 `git pull template master` 로 받아올 수 있습니다.
+> - 급하면 이 부분(내 저장소 만들기)은 건너뛰고 나중에 해도 됩니다 —
+>   Claude Code 에게 **"내 GitHub 저장소 만들어줘"** 라고 하면 위 절차를 대신 해 줍니다.
 
 ---
 
@@ -194,8 +224,9 @@ npm run dev
 
 ## ✅ 설치 완료 체크리스트
 
-- [ ] `git --version` / `node -v`(20.9+) / `supabase --version` 이 모두 나온다
+- [ ] `git --version` / `node -v`(20.9+) / `gh --version` / `supabase --version` / `vercel --version` 이 모두 나온다
 - [ ] `npm install` 이 에러 없이 끝났다
+- [ ] (권장) `gh repo create ... --source=. --push` 로 내 GitHub 저장소가 만들어졌다
 - [ ] `supabase db push` 가 에러 없이 끝났고, Table Editor 에 테이블이 보인다
 - [ ] `npm run setup:admin` 으로 기본 계정(**admin / jadong!**)이 생성됐다
 - [ ] `npm run dev` 후 http://localhost:3000 에서 **admin / jadong!** 로 로그인된다
@@ -227,6 +258,42 @@ npm run dev
 ### 회사 정보(견적서)
 상호/대표자/사업자번호/계좌 등은 **기본적으로 비어 있습니다(개인정보 미포함).** 본인 회사 정보로 채우려면:
 - 견적서 공급자/계좌: `src/lib/quotation-constants.ts`
+
+---
+
+## 7. (선택) Vercel 로 인터넷에 배포하기
+
+로컬(`npm run dev`)로만 써도 충분하지만, 배포하면 **어디서나(휴대폰 포함) 접속**할 수 있습니다.
+Claude Code 에게 **"배포해줘"** 라고 하면 아래 절차를 대신 진행해 줍니다. 직접 하려면:
+
+```bash
+# 1) 로그인 (처음 한 번, 브라우저가 열립니다 — 일반 터미널에서 실행)
+vercel login
+
+# 2) 프로젝트 생성·연결 (첫 실행 시 자동 생성)
+vercel link --yes
+
+# 3) 환경변수 등록 — .env.local 의 4개 값을 그대로 넣습니다 (각 명령 실행 후 값 붙여넣기)
+vercel env add NEXT_PUBLIC_SUPABASE_URL production
+vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production
+vercel env add SUPABASE_SERVICE_ROLE_KEY production
+vercel env add NEXT_PUBLIC_AUTH_EMAIL_DOMAIN production
+
+# 4) 배포
+vercel --prod
+```
+
+끝나면 `https://<프로젝트명>.vercel.app` 주소가 나옵니다. 알아두세요:
+
+- 🔐 **배포하면 그 주소를 아는 누구나 로그인 화면까지는 접근할 수 있습니다.**
+  기본 비밀번호(`jadong!`)를 쓰고 있다면 **배포 전에 반드시 변경**하세요(마이페이지).
+- **DB 는 그대로 Supabase** 를 쓰므로 로컬과 배포본이 **같은 데이터**를 봅니다.
+- 코드를 고친 뒤에는 `vercel --prod` 만 다시 실행하면 재배포됩니다.
+- Slack 웹훅/외부 연동을 배포본에서 쓰려면 `NEXT_PUBLIC_APP_URL` 환경변수를 배포 주소로 추가하세요.
+- **Cron(자동 배치)**: 기본 포함된 `vercel.json` 의 크론은 **매일 1회 Slack 일정 알림**
+  (무료 Hobby 플랜에서 동작)입니다. 분 단위 일정 리마인더·반복매입 자동생성 크론은
+  Hobby 플랜 제한(하루 1회)에 걸리므로 Pro 플랜에서 `vercel.json` 의 `crons` 에 추가하세요.
+  크론을 쓰려면 `CRON_SECRET` 환경변수도 함께 등록해야 합니다.
 
 ---
 
