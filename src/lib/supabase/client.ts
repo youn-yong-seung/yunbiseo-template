@@ -1,10 +1,25 @@
 import { createBrowserClient } from "@supabase/ssr";
 
 function instantiate() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !anonKey) {
+    // 브라우저 런타임에서 env 가 비어 있으면 설정 문제이므로 명확한 안내와 함께 실패시킨다.
+    if (typeof window !== "undefined") {
+      throw new Error(
+        "Supabase 환경변수(NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY)가 없습니다. .env.local 을 설정한 뒤 다시 빌드/실행하세요."
+      );
+    }
+    // 빌드 프리렌더(SSR) 단계에서는 클라이언트가 실제 네트워크 요청을 하지 않으므로
+    // placeholder 로 대체해 env 없이도 `npm run build` 가 통과하도록 한다.
+    return createBrowserClient(
+      "https://placeholder.supabase.co",
+      "sb_publishable_placeholder"
+    );
+  }
+
+  return createBrowserClient(url, anonKey);
 }
 
 let browserClientSingleton: ReturnType<typeof instantiate> | null = null;
