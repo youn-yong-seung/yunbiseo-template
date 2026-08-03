@@ -30,7 +30,7 @@ export const GEMINI_MODEL_OPTIONS: GeminiModelOption[] = [
     max_output: "64K",
     input_price: 0.3,
     output_price: 2.5,
-    description: "품질과 속도의 균형이 좋은 기본 OCR 후보",
+    description: "품질과 속도의 균형이 좋은 기본 후보",
     stable: true,
   },
   {
@@ -57,12 +57,12 @@ export const GEMINI_MODEL_OPTIONS: GeminiModelOption[] = [
   },
 ];
 
-export const DEFAULT_GEMINI_OCR_MODEL = "gemini-2.5-flash-lite";
+export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-lite";
 
 export function getGeminiModelOption(model: string) {
   return (
     GEMINI_MODEL_OPTIONS.find((option) => option.id === model) ??
-    GEMINI_MODEL_OPTIONS.find((option) => option.id === DEFAULT_GEMINI_OCR_MODEL)!
+    GEMINI_MODEL_OPTIONS.find((option) => option.id === DEFAULT_GEMINI_MODEL)!
   );
 }
 
