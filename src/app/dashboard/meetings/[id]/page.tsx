@@ -535,12 +535,9 @@ export default function MeetingDetailPage() {
           <CardContent>
             {meeting.leads ? (
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <Link
-                  href={`/dashboard/leads/${meeting.lead_id}`}
-                  className="text-sm font-medium text-primary hover:underline"
-                >
+                <span className="text-sm font-medium">
                   {mask("customer_name", meeting.leads.company_name)}
-                </Link>
+                </span>
                 <div className="flex gap-2">
                   <Button
                     variant="outline"

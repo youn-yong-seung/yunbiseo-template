@@ -812,12 +812,7 @@ function LinkChips({
 
       {meeting.leads ? (
         <span className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/40 py-0.5 pl-2.5 pr-1 text-xs text-muted-foreground">
-          <Link
-            href={`/dashboard/leads/${meeting.lead_id}`}
-            className="hover:text-foreground"
-          >
-            리드: {meeting.leads.company_name}
-          </Link>
+          <span>리드: {meeting.leads.company_name}</span>
           <button
             type="button"
             onClick={onOpenLead}

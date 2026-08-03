@@ -120,12 +120,7 @@ export function ScheduleView({ schedule, employees, categories }: ScheduleViewPr
         label="리드"
         value={
           schedule.leads ? (
-            <Link
-              href={`/dashboard/leads/${schedule.leads.id}`}
-              className="text-primary underline-offset-4 hover:underline"
-            >
-              {schedule.leads.company_name}
-            </Link>
+            <span>{schedule.leads.company_name}</span>
           ) : (
             <span className="text-muted-foreground">리드 없음</span>
           )
