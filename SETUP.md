@@ -140,7 +140,7 @@ supabase db push
 ```
 
 > ✅ 성공하면 Supabase 대시보드의 **Table Editor** 에 `employees`, `customers`, `projects` 등
-> 51개 테이블이 생깁니다. (이 스키마는 신규 프로젝트에서 0 에러로 적용되는 것을 검증했습니다.)
+> 30개 테이블이 생깁니다. (이 스키마는 신규 프로젝트에서 0 에러로 적용되는 것을 검증했습니다.)
 
 ---
 
@@ -210,25 +210,23 @@ npm run dev
 
 | 연동 | 켜면 되는 기능 | 필요한 것 | 어디서 설정 |
 |------|----------------|-----------|-------------|
-| **Google Gemini** | 명함 OCR · 입금 AI매칭 · 미팅 자동매칭 | Gemini API Key | 시스템설정 화면 |
+| **Google Gemini** | 입금 AI매칭 · 미팅 자동매칭 | Gemini API Key | 시스템설정 화면 |
 | **Anthropic Claude** | AI 견적 생성 · 미팅 매칭(보조) | `ANTHROPIC_API_KEY` | ⚠️ **`.env.local` 에만** (시스템설정에 입력란 없음) |
 | **Bolta** | 세금계산서 발행(매출 상세) | Bolta API Key | 시스템설정 화면 |
 | **Slack** | 프로젝트/할일/매입/입금/일정 알림 | Slack Bot Token | 시스템설정 화면 |
-| **Google Drive** | 고객/프로젝트/명함/자료실 파일·폴더 | 서비스 계정 + 폴더 공유 | **[docs/GOOGLE_DRIVE_SETUP.md](./docs/GOOGLE_DRIVE_SETUP.md)** |
+| **Google Drive** | 고객/프로젝트 파일·폴더 | 서비스 계정 + 폴더 공유 | **[docs/GOOGLE_DRIVE_SETUP.md](./docs/GOOGLE_DRIVE_SETUP.md)** |
 | **Gmail/Google 캘린더** | 메일·캘린더 연동 | Google OAuth 클라이언트 | `.env.local`(`GOOGLE_OAUTH_*`) |
 | **Vercel 배포 + Cron** | 인터넷 배포 · Slack 일정 알림/반복매입 자동생성 | Vercel + `CRON_SECRET` | `vercel` CLI / 대시보드 |
 
 ### ⚠️ 학생 환경에서 "데이터가 없어 비어 보이는" 메뉴 (정상입니다)
 아래는 **외부 자동 유입**을 전제로 설계돼서, 연동 전에는 화면이 비어 있는 게 정상입니다. 강의에서 참고하세요.
 
-- **카드사용내역 / 법인카드** — 카드 SMS를 휴대폰 포워더(Tasker 등)가 `웹훅`으로 보내야 채워집니다. 수동 추가 UI는 없습니다.
 - **반복 매입** — 템플릿 등록은 되지만, 실제 매입 자동생성은 **Vercel Cron**(`generate-recurring-expenses`)이 돌아야 합니다.
 - **미팅 자동 전사/요약·입금 자동매칭** — 외부 녹취/은행 웹훅 + AI 키가 있어야 자동화됩니다(수동 입력은 가능).
 
-### 회사 정보(견적서 · 재직증명서)
+### 회사 정보(견적서)
 상호/대표자/사업자번호/계좌 등은 **기본적으로 비어 있습니다(개인정보 미포함).** 본인 회사 정보로 채우려면:
 - 견적서 공급자/계좌: `src/lib/quotation-constants.ts`
-- 재직증명서 회사정보: `src/app/dashboard/certificates/page.tsx`
 
 ---
 
