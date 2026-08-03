@@ -301,7 +301,6 @@ export interface Expense {
   slack_thread_ts: string | null;
   memo: string | null;
   source: ExpenseSource;
-  card_transaction_id: string | null;
   recurring_expense_id: string | null;
   receipt_url: string | null;
   created_at: string;
@@ -343,68 +342,9 @@ export type ExpenseInsert = Omit<
   | "cancelled_reason"
   | "slack_thread_ts"
   | "source"
-  | "card_transaction_id"
   | "recurring_expense_id"
   | "receipt_url"
 >;
-
-export interface CorporateCard {
-  id: string;
-  alias: string | null;
-  last4: string;
-  holder_employee_id: string | null;
-  issuer: string | null;
-  is_active: boolean;
-  memo: string | null;
-  created_at: string;
-  updated_at: string;
-  holder?: { id: string; name: string } | null;
-}
-
-export type CorporateCardInsert = Omit<
-  CorporateCard,
-  "id" | "created_at" | "updated_at" | "holder"
->;
-export type CorporateCardUpdate = Partial<CorporateCardInsert>;
-
-export type CardTransactionStatus = "pending" | "confirmed" | "ignored";
-export type CardTransactionParseStatus = "parsed" | "partial" | "failed";
-
-export const CARD_TRANSACTION_STATUS_LABEL: Record<CardTransactionStatus, string> = {
-  pending: "미확정",
-  confirmed: "매입확정",
-  ignored: "무시",
-};
-
-export interface CardTransaction {
-  id: string;
-  card_id: string | null;
-  card_last4: string | null;
-  amount: number;
-  currency: string;
-  foreign_amount: number | null;
-  merchant: string | null;
-  approved_at: string;
-  raw_text: string;
-  parse_status: CardTransactionParseStatus;
-  description: string | null;
-  receipt_url: string | null;
-  receipt_required: boolean;
-  type_id: string | null;
-  expense_id: string | null;
-  status: CardTransactionStatus;
-  created_at: string;
-  updated_at: string;
-  card?: { id: string; alias: string | null; last4: string } | null;
-  expense_type?: { id: string; name: string; is_vat_deductible: boolean } | null;
-  expense?: { id: string; title: string } | null;
-}
-
-export type CardTransactionInsert = Omit<
-  CardTransaction,
-  "id" | "created_at" | "updated_at" | "card" | "expense"
->;
-export type CardTransactionUpdate = Partial<CardTransactionInsert>;
 
 export interface RecurringExpense {
   id: string;
@@ -432,7 +372,7 @@ export type RecurringExpenseInsert = Omit<
 >;
 export type RecurringExpenseUpdate = Partial<RecurringExpenseInsert>;
 
-export type ExpenseSource = "manual" | "card" | "recurring";
+export type ExpenseSource = "manual" | "recurring";
 
 export interface ExpenseStatusHistory {
   id: string;

@@ -6,7 +6,6 @@ const SLACK_SETTING_KEYS = [
   "slack_project_channel",
   "slack_schedule_channel",
   "slack_schedule_time",
-  "slack_sms_channel",
   "slack_signing_secret",
 ] as const;
 
@@ -31,7 +30,6 @@ export async function GET() {
     project_channel: settings.projectChannel ?? "",
     schedule_channel: settings.scheduleChannel ?? "",
     schedule_time: settings.scheduleTime ?? "07:00",
-    sms_channel: settings.smsChannel ?? "",
     signing_secret: settings.signingSecret ?? "",
   });
 }
@@ -52,7 +50,6 @@ export async function PUT(request: Request) {
       ? { slack_schedule_channel: asTrimmedString(body?.schedule_channel) }
       : {}),
     ...(hasOwn(body, "schedule_time") ? { slack_schedule_time: asTrimmedString(body?.schedule_time) } : {}),
-    ...(hasOwn(body, "sms_channel") ? { slack_sms_channel: asTrimmedString(body?.sms_channel) } : {}),
     ...(hasOwn(body, "signing_secret")
       ? { slack_signing_secret: asTrimmedString(body?.signing_secret) }
       : {}),

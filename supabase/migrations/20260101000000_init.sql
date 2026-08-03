@@ -435,36 +435,6 @@ ALTER SEQUENCE public.app_users_id_seq OWNED BY public.app_users.id;
 
 
 --
--- Name: card_transactions; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.card_transactions (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    card_id uuid,
-    card_last4 text,
-    amount integer NOT NULL,
-    merchant text,
-    approved_at timestamp with time zone NOT NULL,
-    raw_text text NOT NULL,
-    parse_status text DEFAULT 'parsed'::text NOT NULL,
-    description text,
-    receipt_url text,
-    receipt_required boolean DEFAULT false NOT NULL,
-    expense_id uuid,
-    status text DEFAULT 'pending'::text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    currency text DEFAULT 'KRW'::text NOT NULL,
-    foreign_amount numeric(14,2),
-    type_id uuid,
-    is_cancellation boolean DEFAULT false NOT NULL,
-    paired_transaction_id uuid,
-    CONSTRAINT card_transactions_parse_status_check CHECK ((parse_status = ANY (ARRAY['parsed'::text, 'partial'::text, 'failed'::text]))),
-    CONSTRAINT card_transactions_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'ignored'::text])))
-);
-
-
---
 -- Name: chat_usage_logs; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -561,23 +531,6 @@ CREATE TABLE public.contracts (
     CONSTRAINT contracts_customer_sign_type_check CHECK ((customer_sign_type = ANY (ARRAY['서명'::text, '도장'::text]))),
     CONSTRAINT contracts_internal_sign_type_check CHECK ((internal_sign_type = ANY (ARRAY['서명'::text, '도장'::text]))),
     CONSTRAINT contracts_status_check CHECK ((status = ANY (ARRAY['작성중'::text, '발송완료'::text, '완료'::text, '취소'::text])))
-);
-
-
---
--- Name: corporate_cards; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.corporate_cards (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    alias text,
-    last4 text NOT NULL,
-    holder_employee_id uuid,
-    issuer text,
-    is_active boolean DEFAULT true NOT NULL,
-    memo text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -765,10 +718,9 @@ CREATE TABLE public.expenses (
     cancelled_reason text,
     slack_thread_ts text,
     source text DEFAULT 'manual'::text NOT NULL,
-    card_transaction_id uuid,
     recurring_expense_id uuid,
     receipt_url text,
-    CONSTRAINT expenses_source_check CHECK ((source = ANY (ARRAY['manual'::text, 'card'::text, 'recurring'::text]))),
+    CONSTRAINT expenses_source_check CHECK ((source = ANY (ARRAY['manual'::text, 'recurring'::text]))),
     CONSTRAINT expenses_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'requested'::text, 'approved'::text, 'rejected'::text, 'scheduled'::text, 'paid'::text, 'cancelled'::text]))),
     CONSTRAINT expenses_tax_category_check CHECK ((tax_category = ANY (ARRAY['personal_withholding'::text, 'business_vat'::text, 'corporate_vat'::text, 'none'::text])))
 );
@@ -917,19 +869,6 @@ CREATE TABLE public.notes (
     customer_id uuid,
     author_employee_id uuid,
     author_name text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
--- Name: notification_filters; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.notification_filters (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    phrase text NOT NULL,
-    enabled boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -1495,14 +1434,6 @@ ALTER TABLE ONLY public.app_users
 
 
 --
--- Name: card_transactions card_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.card_transactions
-    ADD CONSTRAINT card_transactions_pkey PRIMARY KEY (id);
-
-
---
 -- Name: chat_usage_logs chat_usage_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1532,14 +1463,6 @@ ALTER TABLE ONLY public.contract_templates
 
 ALTER TABLE ONLY public.contracts
     ADD CONSTRAINT contracts_pkey PRIMARY KEY (id);
-
-
---
--- Name: corporate_cards corporate_cards_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.corporate_cards
-    ADD CONSTRAINT corporate_cards_pkey PRIMARY KEY (id);
 
 
 --
@@ -1692,14 +1615,6 @@ ALTER TABLE ONLY public.meetings
 
 ALTER TABLE ONLY public.notes
     ADD CONSTRAINT notes_pkey PRIMARY KEY (id);
-
-
---
--- Name: notification_filters notification_filters_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.notification_filters
-    ADD CONSTRAINT notification_filters_pkey PRIMARY KEY (id);
 
 
 --
@@ -1963,55 +1878,6 @@ CREATE INDEX idx_app_logs_level ON public.app_logs USING btree (level);
 
 
 --
--- Name: idx_card_tx_approved_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_card_tx_approved_at ON public.card_transactions USING btree (approved_at DESC);
-
-
---
--- Name: idx_card_tx_card_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_card_tx_card_id ON public.card_transactions USING btree (card_id);
-
-
---
--- Name: idx_card_tx_expense_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_card_tx_expense_id ON public.card_transactions USING btree (expense_id) WHERE (expense_id IS NOT NULL);
-
-
---
--- Name: idx_card_tx_is_cancellation; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_card_tx_is_cancellation ON public.card_transactions USING btree (is_cancellation) WHERE (is_cancellation = true);
-
-
---
--- Name: idx_card_tx_paired_transaction_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_card_tx_paired_transaction_id ON public.card_transactions USING btree (paired_transaction_id) WHERE (paired_transaction_id IS NOT NULL);
-
-
---
--- Name: idx_card_tx_status; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_card_tx_status ON public.card_transactions USING btree (status);
-
-
---
--- Name: idx_card_tx_type_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_card_tx_type_id ON public.card_transactions USING btree (type_id) WHERE (type_id IS NOT NULL);
-
-
---
 -- Name: idx_chat_usage_logs_created; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2068,13 +1934,6 @@ CREATE INDEX idx_contracts_status ON public.contracts USING btree (status);
 
 
 --
--- Name: idx_corporate_cards_holder; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_corporate_cards_holder ON public.corporate_cards USING btree (holder_employee_id);
-
-
---
 -- Name: idx_customer_contacts_customer_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2114,13 +1973,6 @@ CREATE INDEX idx_employees_login_id ON public.employees USING btree (login_id);
 --
 
 CREATE INDEX idx_expense_status_history_expense_id ON public.expense_status_history USING btree (expense_id, created_at DESC);
-
-
---
--- Name: idx_expenses_card_tx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_expenses_card_tx ON public.expenses USING btree (card_transaction_id) WHERE (card_transaction_id IS NOT NULL);
 
 
 --
@@ -2593,13 +2445,6 @@ CREATE INDEX idx_weekly_meetings_week_start_date ON public.weekly_meetings USING
 
 
 --
--- Name: notification_filters_phrase_unique; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX notification_filters_phrase_unique ON public.notification_filters USING btree (lower(phrase));
-
-
---
 -- Name: slack_pending_actions_confirmation_ts_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2611,13 +2456,6 @@ CREATE INDEX slack_pending_actions_confirmation_ts_idx ON public.slack_pending_a
 --
 
 CREATE INDEX slack_pending_actions_expires_at_idx ON public.slack_pending_actions USING btree (expires_at) WHERE ((executed_at IS NULL) AND (cancelled_at IS NULL));
-
-
---
--- Name: uq_corporate_cards_active_last4; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uq_corporate_cards_active_last4 ON public.corporate_cards USING btree (last4) WHERE (is_active = true);
 
 
 --
@@ -2712,13 +2550,6 @@ CREATE TRIGGER schedules_updated_at BEFORE UPDATE ON public.schedules FOR EACH R
 
 
 --
--- Name: card_transactions set_card_transactions_updated_at; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER set_card_transactions_updated_at BEFORE UPDATE ON public.card_transactions FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
-
-
---
 -- Name: contract_templates set_contract_templates_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -2730,13 +2561,6 @@ CREATE TRIGGER set_contract_templates_updated_at BEFORE UPDATE ON public.contrac
 --
 
 CREATE TRIGGER set_contracts_updated_at BEFORE UPDATE ON public.contracts FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
-
---
--- Name: corporate_cards set_corporate_cards_updated_at; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER set_corporate_cards_updated_at BEFORE UPDATE ON public.corporate_cards FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
 
 
 --
@@ -2854,38 +2678,6 @@ ALTER TABLE ONLY public.app_users
 
 
 --
--- Name: card_transactions card_transactions_card_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.card_transactions
-    ADD CONSTRAINT card_transactions_card_id_fkey FOREIGN KEY (card_id) REFERENCES public.corporate_cards(id) ON DELETE SET NULL;
-
-
---
--- Name: card_transactions card_transactions_expense_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.card_transactions
-    ADD CONSTRAINT card_transactions_expense_id_fkey FOREIGN KEY (expense_id) REFERENCES public.expenses(id) ON DELETE SET NULL;
-
-
---
--- Name: card_transactions card_transactions_paired_transaction_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.card_transactions
-    ADD CONSTRAINT card_transactions_paired_transaction_id_fkey FOREIGN KEY (paired_transaction_id) REFERENCES public.card_transactions(id) ON DELETE SET NULL;
-
-
---
--- Name: card_transactions card_transactions_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.card_transactions
-    ADD CONSTRAINT card_transactions_type_id_fkey FOREIGN KEY (type_id) REFERENCES public.expense_types(id) ON DELETE SET NULL;
-
-
---
 -- Name: contract_audit_logs contract_audit_logs_contract_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2915,14 +2707,6 @@ ALTER TABLE ONLY public.contracts
 
 ALTER TABLE ONLY public.contracts
     ADD CONSTRAINT contracts_template_id_fkey FOREIGN KEY (template_id) REFERENCES public.contract_templates(id) ON DELETE SET NULL;
-
-
---
--- Name: corporate_cards corporate_cards_holder_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.corporate_cards
-    ADD CONSTRAINT corporate_cards_holder_employee_id_fkey FOREIGN KEY (holder_employee_id) REFERENCES public.employees(id) ON DELETE SET NULL;
 
 
 --
@@ -2987,14 +2771,6 @@ ALTER TABLE ONLY public.expense_status_history
 
 ALTER TABLE ONLY public.expenses
     ADD CONSTRAINT expenses_approver_id_fkey FOREIGN KEY (approver_id) REFERENCES public.employees(id) ON DELETE SET NULL;
-
-
---
--- Name: expenses expenses_card_transaction_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.expenses
-    ADD CONSTRAINT expenses_card_transaction_id_fkey FOREIGN KEY (card_transaction_id) REFERENCES public.card_transactions(id) ON DELETE SET NULL;
 
 
 --
@@ -3454,20 +3230,6 @@ CREATE POLICY "Authenticated users can delete api_keys" ON public.api_keys FOR D
 
 
 --
--- Name: card_transactions Authenticated users can delete card_transactions; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can delete card_transactions" ON public.card_transactions FOR DELETE TO authenticated USING (true);
-
-
---
--- Name: corporate_cards Authenticated users can delete corporate_cards; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can delete corporate_cards" ON public.corporate_cards FOR DELETE TO authenticated USING (true);
-
-
---
 -- Name: customer_notes Authenticated users can delete customer notes; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3636,24 +3398,10 @@ CREATE POLICY "Authenticated users can insert api_keys" ON public.api_keys FOR I
 
 
 --
--- Name: card_transactions Authenticated users can insert card_transactions; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can insert card_transactions" ON public.card_transactions FOR INSERT TO authenticated WITH CHECK (true);
-
-
---
 -- Name: contract_audit_logs Authenticated users can insert contract_audit_logs; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY "Authenticated users can insert contract_audit_logs" ON public.contract_audit_logs FOR INSERT TO authenticated WITH CHECK (true);
-
-
---
--- Name: corporate_cards Authenticated users can insert corporate_cards; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can insert corporate_cards" ON public.corporate_cards FOR INSERT TO authenticated WITH CHECK (true);
 
 
 --
@@ -3867,13 +3615,6 @@ CREATE POLICY "Authenticated users can manage customer_contacts" ON public.custo
 
 
 --
--- Name: notification_filters Authenticated users can manage notification filters; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can manage notification filters" ON public.notification_filters TO authenticated USING (true) WITH CHECK (true);
-
-
---
 -- Name: quotation_items Authenticated users can manage quotation_items; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3923,20 +3664,6 @@ CREATE POLICY "Authenticated users can read all gemini usage logs" ON public.gem
 
 
 --
--- Name: card_transactions Authenticated users can read card_transactions; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can read card_transactions" ON public.card_transactions FOR SELECT TO authenticated USING (true);
-
-
---
--- Name: corporate_cards Authenticated users can read corporate_cards; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can read corporate_cards" ON public.corporate_cards FOR SELECT TO authenticated USING (true);
-
-
---
 -- Name: deposits Authenticated users can read deposits; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3962,13 +3689,6 @@ CREATE POLICY "Authenticated users can read expense_types" ON public.expense_typ
 --
 
 CREATE POLICY "Authenticated users can read expenses" ON public.expenses FOR SELECT TO authenticated USING (true);
-
-
---
--- Name: notification_filters Authenticated users can read notification filters; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can read notification filters" ON public.notification_filters FOR SELECT TO authenticated USING (true);
 
 
 --
@@ -4081,20 +3801,6 @@ CREATE POLICY "Authenticated users can select weekly_meetings" ON public.weekly_
 --
 
 CREATE POLICY "Authenticated users can update api_keys" ON public.api_keys FOR UPDATE USING ((auth.role() = 'authenticated'::text));
-
-
---
--- Name: card_transactions Authenticated users can update card_transactions; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can update card_transactions" ON public.card_transactions FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
-
-
---
--- Name: corporate_cards Authenticated users can update corporate_cards; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can update corporate_cards" ON public.corporate_cards FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
 
 --
@@ -4357,20 +4063,6 @@ CREATE POLICY "No app access to meeting started_at backfill backup" ON public._m
 
 
 --
--- Name: card_transactions Service role full access on card_transactions; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Service role full access on card_transactions" ON public.card_transactions TO service_role USING (true) WITH CHECK (true);
-
-
---
--- Name: corporate_cards Service role full access on corporate_cards; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Service role full access on corporate_cards" ON public.corporate_cards TO service_role USING (true) WITH CHECK (true);
-
-
---
 -- Name: deposits Service role full access on deposits; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -4483,12 +4175,6 @@ CREATE POLICY notes_select ON public.notes FOR SELECT TO authenticated USING (tr
 
 CREATE POLICY notes_update ON public.notes FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
-
---
--- Name: notification_filters; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.notification_filters ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: project_assignees; Type: ROW SECURITY; Schema: public; Owner: -
@@ -4797,15 +4483,6 @@ GRANT ALL ON SEQUENCE public.app_users_id_seq TO service_role;
 
 
 --
--- Name: TABLE card_transactions; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.card_transactions TO anon;
-GRANT ALL ON TABLE public.card_transactions TO authenticated;
-GRANT ALL ON TABLE public.card_transactions TO service_role;
-
-
---
 -- Name: TABLE chat_usage_logs; Type: ACL; Schema: public; Owner: -
 --
 
@@ -4839,15 +4516,6 @@ GRANT ALL ON TABLE public.contract_templates TO service_role;
 GRANT ALL ON TABLE public.contracts TO anon;
 GRANT ALL ON TABLE public.contracts TO authenticated;
 GRANT ALL ON TABLE public.contracts TO service_role;
-
-
---
--- Name: TABLE corporate_cards; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.corporate_cards TO anon;
-GRANT ALL ON TABLE public.corporate_cards TO authenticated;
-GRANT ALL ON TABLE public.corporate_cards TO service_role;
 
 
 --
@@ -4983,15 +4651,6 @@ GRANT ALL ON TABLE public.meetings TO service_role;
 GRANT ALL ON TABLE public.notes TO anon;
 GRANT ALL ON TABLE public.notes TO authenticated;
 GRANT ALL ON TABLE public.notes TO service_role;
-
-
---
--- Name: TABLE notification_filters; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.notification_filters TO anon;
-GRANT ALL ON TABLE public.notification_filters TO authenticated;
-GRANT ALL ON TABLE public.notification_filters TO service_role;
 
 
 --

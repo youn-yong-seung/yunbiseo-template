@@ -155,18 +155,6 @@ const menuSections: MenuSection[] = [
         ),
       },
       {
-        label: "카드사용내역",
-        href: "/dashboard/card-transactions",
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="4" width="18" height="16" rx="2" />
-            <line x1="7" y1="9" x2="17" y2="9" />
-            <line x1="7" y1="13" x2="17" y2="13" />
-            <line x1="7" y1="17" x2="13" y2="17" />
-          </svg>
-        ),
-      },
-      {
         label: "영업이익분석",
         href: "/dashboard/profit-analysis",
         icon: (
@@ -181,17 +169,6 @@ const menuSections: MenuSection[] = [
 ];
 
 const adminMenuItems: MenuItem[] = [
-  {
-    label: "법인카드",
-    href: "/dashboard/cards",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="5" width="20" height="14" rx="2" />
-        <line x1="2" y1="10" x2="22" y2="10" />
-        <line x1="6" y1="15" x2="10" y2="15" />
-      </svg>
-    ),
-  },
   {
     label: "직원관리",
     href: "/dashboard/employees",

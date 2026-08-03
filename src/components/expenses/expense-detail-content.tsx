@@ -65,7 +65,6 @@ const STATUS_BADGE_CLASS: Record<ExpenseStatus, string> = {
 
 const SOURCE_LABEL: Record<Expense["source"], string> = {
   manual: "직접 등록",
-  card: "법인카드",
   recurring: "반복 매입",
 };
 
@@ -185,10 +184,7 @@ export function ExpenseDetailContent({
     }
   };
 
-  const canEdit =
-    status === "draft" ||
-    status === "rejected" ||
-    (expense.source === "card" && status !== "cancelled");
+  const canEdit = status === "draft" || status === "rejected";
   const canCancel =
     status === "draft" || status === "requested" || status === "approved" || status === "scheduled";
 
@@ -291,12 +287,7 @@ export function ExpenseDetailContent({
           />
           <InfoRow label="매입구분" value={taxCategoryLabel} />
           <InfoRow label="매입유형" value={expense.expense_types?.name || "-"} />
-          <InfoRow
-            label="등록경로"
-            value={
-              expense.source === "card" ? `${sourceLabel} 확정 시 자동 지급완료` : sourceLabel
-            }
-          />
+          <InfoRow label="등록경로" value={sourceLabel} />
           <InfoRow label="매입일" value={formatDate(expense.purchase_date)} />
           {expense.rejected_reason ? (
             <InfoRow label="반려 사유" value={expense.rejected_reason} multiline />
@@ -324,19 +315,6 @@ export function ExpenseDetailContent({
               )
             }
           />
-          {expense.card_transaction_id ? (
-            <InfoRow
-              label="카드거래"
-              value={
-                <Link
-                  href={`/dashboard/card-transactions/${expense.card_transaction_id}`}
-                  className="text-primary underline-offset-4 hover:underline"
-                >
-                  카드사용내역 보기
-                </Link>
-              }
-            />
-          ) : null}
           {expense.receipt_url ? (
             <InfoRow
               label="영수증"

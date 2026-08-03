@@ -13,7 +13,6 @@ const SLACK_SETTING_KEYS = [
   "slack_expense_channel",
   "slack_deposit_channel",
   "slack_finance_channel",
-  "slack_sms_channel",
   "slack_signing_secret",
   "slack_bot_user_id",
 ] as const;
@@ -392,9 +391,6 @@ export async function getSlackSettings() {
       normalizeValue(settings.slack_finance_channel) ??
       normalizeValue(process.env.SLACK_FINANCE_CHANNEL) ??
       DEFAULT_FINANCE_CHANNEL,
-    smsChannel:
-      normalizeValue(settings.slack_sms_channel) ??
-      normalizeValue(process.env.SLACK_SMS_CHANNEL),
     signingSecret:
       normalizeValue(settings.slack_signing_secret) ??
       normalizeValue(process.env.SLACK_SIGNING_SECRET),

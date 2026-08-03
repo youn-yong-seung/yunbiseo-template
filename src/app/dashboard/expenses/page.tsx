@@ -90,7 +90,6 @@ const STATUS_FILTER_OPTIONS: Array<{ value: ExpenseStatusFilter; label: string }
 
 const SOURCE_LABEL: Record<Expense["source"], string> = {
   manual: "직접",
-  card: "카드",
   recurring: "반복",
 };
 

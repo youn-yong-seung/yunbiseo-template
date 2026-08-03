@@ -60,16 +60,7 @@ interface GeminiSettingsForm {
 interface SlackSettingsForm {
   bot_token: string;
   project_channel: string;
-  sms_channel: string;
   signing_secret: string;
-}
-
-interface NotificationFilterRow {
-  id: string;
-  phrase: string;
-  enabled: boolean;
-  created_at: string;
-  updated_at: string;
 }
 
 interface GeminiUsageLog {
@@ -246,15 +237,8 @@ export default function SettingsPage() {
   const [slackSettings, setSlackSettings] = useState<SlackSettingsForm>({
     bot_token: "",
     project_channel: "",
-    sms_channel: "",
     signing_secret: "",
   });
-  const [notificationFilters, setNotificationFilters] = useState<NotificationFilterRow[]>([]);
-  const [filtersLoading, setFiltersLoading] = useState(true);
-  const [newFilterPhrase, setNewFilterPhrase] = useState("");
-  const [filterSaving, setFilterSaving] = useState(false);
-  const [filterTogglingId, setFilterTogglingId] = useState<string | null>(null);
-  const [filterDeletingId, setFilterDeletingId] = useState<string | null>(null);
   const [geminiLoading, setGeminiLoading] = useState(true);
   const [geminiSaving, setGeminiSaving] = useState(false);
   const [slackLoading, setSlackLoading] = useState(true);
@@ -449,7 +433,6 @@ export default function SettingsPage() {
       setSlackSettings({
         bot_token: data?.bot_token ?? "",
         project_channel: data?.project_channel ?? "",
-        sms_channel: data?.sms_channel ?? "",
         signing_secret: data?.signing_secret ?? "",
       });
     } catch (e) {
@@ -458,90 +441,6 @@ export default function SettingsPage() {
     }
     setSlackLoading(false);
   }, []);
-
-  const fetchNotificationFilters = useCallback(async () => {
-    setFiltersLoading(true);
-    try {
-      const res = await fetch("/api/settings/notification-filters");
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(data?.error || "필터 목록을 불러오지 못했습니다.");
-      }
-      setNotificationFilters(data?.data ?? []);
-    } catch (e) {
-      console.error("알림 필터 조회 실패:", e instanceof Error ? e.message : String(e));
-      toast.error("알림 필터를 불러오지 못했습니다.");
-    }
-    setFiltersLoading(false);
-  }, []);
-
-  const handleAddFilter = async () => {
-    const trimmed = newFilterPhrase.trim();
-    if (!trimmed) return;
-    setFilterSaving(true);
-    try {
-      const res = await fetch("/api/settings/notification-filters", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phrase: trimmed }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(data?.error || "필터를 추가하지 못했습니다.");
-      }
-      setNewFilterPhrase("");
-      await fetchNotificationFilters();
-      toast.success("필터를 추가했습니다.");
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      console.error("알림 필터 추가 실패:", message);
-      toast.error(message);
-    }
-    setFilterSaving(false);
-  };
-
-  const handleToggleFilter = async (row: NotificationFilterRow) => {
-    setFilterTogglingId(row.id);
-    try {
-      const res = await fetch("/api/settings/notification-filters", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: row.id, enabled: !row.enabled }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(data?.error || "필터 상태 변경 실패");
-      }
-      await fetchNotificationFilters();
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      console.error("알림 필터 토글 실패:", message);
-      toast.error(message);
-    }
-    setFilterTogglingId(null);
-  };
-
-  const handleDeleteFilter = async (row: NotificationFilterRow) => {
-    if (!confirm(`"${row.phrase}" 필터를 삭제할까요?`)) return;
-    setFilterDeletingId(row.id);
-    try {
-      const res = await fetch(
-        `/api/settings/notification-filters?id=${encodeURIComponent(row.id)}`,
-        { method: "DELETE" }
-      );
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(data?.error || "필터 삭제 실패");
-      }
-      await fetchNotificationFilters();
-      toast.success("필터를 삭제했습니다.");
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      console.error("알림 필터 삭제 실패:", message);
-      toast.error(message);
-    }
-    setFilterDeletingId(null);
-  };
 
   const handleModelChange = async (model: string, key: "chat_model" | "quotation_ai_model" = "chat_model") => {
     setModelSaving(key);
@@ -673,8 +572,7 @@ export default function SettingsPage() {
     fetchBoltaSettings();
     fetchGeminiSettings();
     fetchSlackSettings();
-    fetchNotificationFilters();
-  }, [fetchApiKeys, fetchProjectTypes, fetchExpenseTypes, fetchScheduleCategories, fetchChatModel, fetchBoltaSettings, fetchGeminiSettings, fetchSlackSettings, fetchNotificationFilters]);
+  }, [fetchApiKeys, fetchProjectTypes, fetchExpenseTypes, fetchScheduleCategories, fetchChatModel, fetchBoltaSettings, fetchGeminiSettings, fetchSlackSettings]);
 
   const openTypeDialog = (type?: ProjectType) => {
     setEditingType(type ?? null);
@@ -1103,7 +1001,7 @@ export default function SettingsPage() {
         <StatCard
           label="매입 유형"
           value={expenseTypes.length}
-          description="매입·카드거래 입력 시 쓰는 계정과목"
+          description="매입 입력 시 쓰는 계정과목"
           icon={Receipt}
           tone="info"
         />
@@ -1170,18 +1068,6 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="slack_sms_channel">SMS 알림 채널</Label>
-                  <Input
-                    id="slack_sms_channel"
-                    value={slackSettings.sms_channel}
-                    onChange={(e) => handleSlackSettingChange("sms_channel", e.target.value)}
-                    placeholder="#sms 또는 C0123456789"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    카드 webhook 으로 들어온 알림 중 아래 SMS 알림 필터를 통과한 메시지가 이 채널로 전달됩니다.
-                  </p>
-                </div>
-                <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="slack_signing_secret">Slack Signing Secret</Label>
                   <Input
                     id="slack_signing_secret"
@@ -1209,90 +1095,6 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
-        </SectionCard>
-      </PageSection>
-
-      <PageSection
-        title="SMS 알림 필터"
-        description="Tasker → 카드 webhook 으로 들어온 알림 중 등록된 phrase 가 본문에 포함되면 Slack 전달을 차단합니다. (카드거래 row 자체는 항상 저장됩니다)"
-      >
-        <SectionCard>
-          <div className="space-y-4">
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Input
-                value={newFilterPhrase}
-                onChange={(e) => setNewFilterPhrase(e.target.value)}
-                placeholder="차단할 문구 (예: (광고), 한진택배입니다)"
-                maxLength={200}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleAddFilter();
-                  }
-                }}
-              />
-              <Button
-                onClick={handleAddFilter}
-                disabled={filterSaving || !newFilterPhrase.trim()}
-              >
-                {filterSaving ? "추가 중..." : "필터 추가"}
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              비교는 대소문자 무시 + 부분일치(contains) 입니다. 하나라도 일치하면 Slack 으로 전달되지 않습니다.
-            </p>
-
-            {filtersLoading ? (
-              <div className="flex h-32 items-center justify-center rounded-[1.25rem] border border-dashed border-border/80 bg-background/60">
-                <p className="text-sm text-muted-foreground">필터 목록을 불러오는 중입니다.</p>
-              </div>
-            ) : notificationFilters.length === 0 ? (
-              <div className="flex h-32 items-center justify-center rounded-[1.25rem] border border-dashed border-border/80 bg-background/60">
-                <p className="text-sm text-muted-foreground">등록된 필터가 없습니다.</p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Phrase</TableHead>
-                    <TableHead className="w-28 text-center">상태</TableHead>
-                    <TableHead className="w-24 text-right">관리</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {notificationFilters.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell className="font-mono text-sm">{row.phrase}</TableCell>
-                      <TableCell className="text-center">
-                        <Button
-                          variant={row.enabled ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => handleToggleFilter(row)}
-                          disabled={filterTogglingId === row.id}
-                        >
-                          {filterTogglingId === row.id
-                            ? "변경 중..."
-                            : row.enabled
-                            ? "사용 중"
-                            : "비활성"}
-                        </Button>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteFilter(row)}
-                          disabled={filterDeletingId === row.id}
-                        >
-                          {filterDeletingId === row.id ? "삭제 중..." : "삭제"}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </div>
         </SectionCard>
       </PageSection>
 
