@@ -435,33 +435,6 @@ ALTER SEQUENCE public.app_users_id_seq OWNED BY public.app_users.id;
 
 
 --
--- Name: business_cards; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.business_cards (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    name text NOT NULL,
-    company_name text,
-    "position" text,
-    email text,
-    phone text,
-    input_method text DEFAULT 'manual'::text NOT NULL,
-    image_name text,
-    image_mime_type text,
-    image_base64 text,
-    ocr_raw_text text,
-    created_by uuid,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    address text,
-    drive_file_id text,
-    drive_web_view_link text,
-    drive_web_content_link text,
-    CONSTRAINT business_cards_input_method_check CHECK ((input_method = ANY (ARRAY['photo'::text, 'manual'::text])))
-);
-
-
---
 -- Name: card_transactions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -808,7 +781,7 @@ CREATE TABLE public.expenses (
 CREATE TABLE public.gemini_usage_logs (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_auth_uid uuid NOT NULL,
-    feature text DEFAULT 'business_card_ocr'::text NOT NULL,
+    feature text NOT NULL,
     model text NOT NULL,
     input_tokens integer DEFAULT 0 NOT NULL,
     output_tokens integer DEFAULT 0 NOT NULL,
@@ -1522,14 +1495,6 @@ ALTER TABLE ONLY public.app_users
 
 
 --
--- Name: business_cards business_cards_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.business_cards
-    ADD CONSTRAINT business_cards_pkey PRIMARY KEY (id);
-
-
---
 -- Name: card_transactions card_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1995,41 +1960,6 @@ CREATE INDEX idx_app_logs_created_at ON public.app_logs USING btree (created_at 
 --
 
 CREATE INDEX idx_app_logs_level ON public.app_logs USING btree (level);
-
-
---
--- Name: idx_business_cards_company_name; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_business_cards_company_name ON public.business_cards USING btree (company_name);
-
-
---
--- Name: idx_business_cards_created_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_business_cards_created_at ON public.business_cards USING btree (created_at DESC);
-
-
---
--- Name: idx_business_cards_email; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_business_cards_email ON public.business_cards USING btree (email);
-
-
---
--- Name: idx_business_cards_name; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_business_cards_name ON public.business_cards USING btree (name);
-
-
---
--- Name: idx_business_cards_phone; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_business_cards_phone ON public.business_cards USING btree (phone);
 
 
 --
@@ -2712,13 +2642,6 @@ CREATE TRIGGER api_keys_updated_at BEFORE UPDATE ON public.api_keys FOR EACH ROW
 
 
 --
--- Name: business_cards business_cards_updated_at; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER business_cards_updated_at BEFORE UPDATE ON public.business_cards FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
-
-
---
 -- Name: customer_notes customer_notes_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -2928,14 +2851,6 @@ ALTER TABLE ONLY public._meeting_started_at_backfill_20260413
 
 ALTER TABLE ONLY public.app_users
     ADD CONSTRAINT app_users_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id);
-
-
---
--- Name: business_cards business_cards_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.business_cards
-    ADD CONSTRAINT business_cards_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.employees(id) ON DELETE SET NULL;
 
 
 --
@@ -3539,13 +3454,6 @@ CREATE POLICY "Authenticated users can delete api_keys" ON public.api_keys FOR D
 
 
 --
--- Name: business_cards Authenticated users can delete business_cards; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can delete business_cards" ON public.business_cards FOR DELETE TO authenticated USING (true);
-
-
---
 -- Name: card_transactions Authenticated users can delete card_transactions; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3725,13 +3633,6 @@ CREATE POLICY "Authenticated users can delete weekly_meetings" ON public.weekly_
 --
 
 CREATE POLICY "Authenticated users can insert api_keys" ON public.api_keys FOR INSERT WITH CHECK ((auth.role() = 'authenticated'::text));
-
-
---
--- Name: business_cards Authenticated users can insert business_cards; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can insert business_cards" ON public.business_cards FOR INSERT TO authenticated WITH CHECK (true);
 
 
 --
@@ -4183,13 +4084,6 @@ CREATE POLICY "Authenticated users can update api_keys" ON public.api_keys FOR U
 
 
 --
--- Name: business_cards Authenticated users can update business_cards; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can update business_cards" ON public.business_cards FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
-
-
---
 -- Name: card_transactions Authenticated users can update card_transactions; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -4376,13 +4270,6 @@ CREATE POLICY "Authenticated users can upsert system settings" ON public.system_
 --
 
 CREATE POLICY "Authenticated users can view api_keys" ON public.api_keys FOR SELECT USING ((auth.role() = 'authenticated'::text));
-
-
---
--- Name: business_cards Authenticated users can view business_cards; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can view business_cards" ON public.business_cards FOR SELECT TO authenticated USING (true);
 
 
 --
@@ -4574,145 +4461,6 @@ CREATE POLICY auth_insert ON public.app_logs FOR INSERT WITH CHECK ((auth.role()
 --
 
 CREATE POLICY auth_select ON public.app_logs FOR SELECT USING ((auth.role() = 'authenticated'::text));
-
-
---
--- Name: business_cards; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.business_cards ENABLE ROW LEVEL SECURITY;
-
---
--- Name: card_transactions; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.card_transactions ENABLE ROW LEVEL SECURITY;
-
---
--- Name: chat_usage_logs; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.chat_usage_logs ENABLE ROW LEVEL SECURITY;
-
---
--- Name: contract_audit_logs; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.contract_audit_logs ENABLE ROW LEVEL SECURITY;
-
---
--- Name: contract_templates; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.contract_templates ENABLE ROW LEVEL SECURITY;
-
---
--- Name: contracts; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.contracts ENABLE ROW LEVEL SECURITY;
-
---
--- Name: corporate_cards; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.corporate_cards ENABLE ROW LEVEL SECURITY;
-
---
--- Name: customer_contacts; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.customer_contacts ENABLE ROW LEVEL SECURITY;
-
---
--- Name: customer_notes; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.customer_notes ENABLE ROW LEVEL SECURITY;
-
---
--- Name: customers; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
-
---
--- Name: deposits; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.deposits ENABLE ROW LEVEL SECURITY;
-
---
--- Name: employees; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.employees ENABLE ROW LEVEL SECURITY;
-
---
--- Name: expense_status_history; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.expense_status_history ENABLE ROW LEVEL SECURITY;
-
---
--- Name: expense_types; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.expense_types ENABLE ROW LEVEL SECURITY;
-
---
--- Name: expenses; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
-
---
--- Name: gemini_usage_logs; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.gemini_usage_logs ENABLE ROW LEVEL SECURITY;
-
---
--- Name: google_calendar_sync_states; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.google_calendar_sync_states ENABLE ROW LEVEL SECURITY;
-
---
--- Name: google_oauth_tokens; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.google_oauth_tokens ENABLE ROW LEVEL SECURITY;
-
---
--- Name: lead_comments; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.lead_comments ENABLE ROW LEVEL SECURITY;
-
---
--- Name: leads; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.leads ENABLE ROW LEVEL SECURITY;
-
---
--- Name: meetings; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.meetings ENABLE ROW LEVEL SECURITY;
-
---
--- Name: notes; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.notes ENABLE ROW LEVEL SECURITY;
-
---
--- Name: notes notes_delete; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY notes_delete ON public.notes FOR DELETE TO authenticated USING (true);
 
 
 --
@@ -5046,15 +4794,6 @@ GRANT ALL ON TABLE public.app_users TO service_role;
 GRANT ALL ON SEQUENCE public.app_users_id_seq TO anon;
 GRANT ALL ON SEQUENCE public.app_users_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.app_users_id_seq TO service_role;
-
-
---
--- Name: TABLE business_cards; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.business_cards TO anon;
-GRANT ALL ON TABLE public.business_cards TO authenticated;
-GRANT ALL ON TABLE public.business_cards TO service_role;
 
 
 --

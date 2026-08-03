@@ -260,8 +260,6 @@ export default function SettingsPage() {
   const [slackLoading, setSlackLoading] = useState(true);
   const [slackSaving, setSlackSaving] = useState(false);
   const [slackTesting, setSlackTesting] = useState(false);
-  const [geminiModels, setGeminiModels] = useState<ModelOption[]>([]);
-  const [currentGeminiModel, setCurrentGeminiModel] = useState("");
   const [geminiUsage, setGeminiUsage] = useState<GeminiUsageSummary>({
     total_requests: 0,
     input_tokens: 0,
@@ -424,8 +422,6 @@ export default function SettingsPage() {
       setGeminiSettings({
         api_key: data?.api_key ?? "",
       });
-      setCurrentGeminiModel(data?.current_model ?? "");
-      setGeminiModels(data?.models ?? []);
       setGeminiUsage({
         total_requests: data?.usage?.total_requests ?? 0,
         input_tokens: data?.usage?.input_tokens ?? 0,
@@ -606,7 +602,6 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           api_key: geminiSettings.api_key,
-          model: currentGeminiModel,
         }),
       });
       const data = await res.json().catch(() => null);
@@ -667,33 +662,6 @@ export default function SettingsPage() {
       toast.error("Slack 테스트 발송에 실패했습니다. 잠시 후 다시 시도해주세요.");
     }
     setSlackTesting(false);
-  };
-
-  const handleGeminiModelChange = async (model: string) => {
-    setGeminiSaving(true);
-    setCurrentGeminiModel(model);
-    try {
-      const res = await fetch("/api/settings/gemini", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          api_key: geminiSettings.api_key,
-          model,
-        }),
-      });
-      const data = await res.json().catch(() => null);
-
-      if (!res.ok) {
-        throw new Error(data?.error || "Gemini 모델 저장에 실패했습니다.");
-      }
-
-      toast.success("명함관리 모델을 저장했습니다.");
-      await fetchGeminiSettings();
-    } catch (e) {
-      console.error("Gemini 모델 저장 실패:", e instanceof Error ? e.message : String(e));
-      toast.error("Gemini 모델 저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
-    }
-    setGeminiSaving(false);
   };
 
   useEffect(() => {
@@ -1167,14 +1135,6 @@ export default function SettingsPage() {
               saving={modelSaving === "quotation_ai_model"}
               onSelect={(id) => handleModelChange(id, "quotation_ai_model")}
           />
-          <ModelSelector
-              title="명함관리모델"
-              models={geminiModels}
-              currentModel={currentGeminiModel}
-              loading={geminiLoading}
-              saving={geminiSaving}
-              onSelect={(id) => void handleGeminiModelChange(id)}
-          />
         </div>
       </PageSection>
 
@@ -1422,8 +1382,8 @@ export default function SettingsPage() {
       </PageSection>
 
       <PageSection
-        title="Gemini OCR 설정"
-        description="명함 사진 OCR에 사용할 Gemini API Key를 저장합니다."
+        title="Gemini API 설정"
+        description="입금 AI 매칭 등 Gemini 기능에 사용할 API Key를 저장합니다."
       >
         <SectionCard>
           {geminiLoading ? (
@@ -1448,14 +1408,14 @@ export default function SettingsPage() {
               </div>
 
               <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
-                명함 OCR은 이 값을 우선 사용하며, 비어 있으면
+                Gemini 기능은 이 값을 우선 사용하며, 비어 있으면
                 <span className="mx-1 font-mono">GEMINI_API_KEY</span>
                 환경변수를 fallback으로 사용합니다.
               </div>
 
               <div className="grid gap-3 md:grid-cols-4">
                 <StatCard
-                  label="OCR 요청"
+                  label="Gemini 요청"
                   value={geminiUsage.total_requests.toLocaleString()}
                   compact
                 />
@@ -1504,7 +1464,7 @@ export default function SettingsPage() {
                     ) : (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center text-muted-foreground">
-                          아직 명함 OCR 사용 로그가 없습니다.
+                          아직 Gemini 사용 로그가 없습니다.
                         </TableCell>
                       </TableRow>
                     )}

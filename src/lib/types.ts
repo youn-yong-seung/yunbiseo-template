@@ -77,34 +77,6 @@ export interface CustomerContact {
 
 export type CustomerContactInsert = Omit<CustomerContact, "id" | "created_at" | "updated_at">;
 
-export type BusinessCardInputMethod = "photo" | "manual";
-
-export interface BusinessCard {
-  id: string;
-  name: string;
-  company_name: string | null;
-  position: string | null;
-  email: string | null;
-  phone: string | null;
-  address: string | null;
-  input_method: BusinessCardInputMethod;
-  image_name: string | null;
-  image_mime_type: string | null;
-  image_base64: string | null;
-  ocr_raw_text: string | null;
-  drive_file_id: string | null;
-  drive_web_view_link: string | null;
-  drive_web_content_link: string | null;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export type BusinessCardInsert = Omit<
-  BusinessCard,
-  "id" | "created_at" | "updated_at"
->;
-
 export interface ProjectType {
   id: string;
   name: string;
