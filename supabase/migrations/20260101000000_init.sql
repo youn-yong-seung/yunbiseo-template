@@ -1111,22 +1111,6 @@ CREATE TABLE public.recurring_expenses (
 
 
 --
--- Name: resource_library_posts; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.resource_library_posts (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    title text NOT NULL,
-    content text NOT NULL,
-    drive_folder_id text,
-    author_employee_id uuid,
-    author_name text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
 -- Name: revenues; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1842,14 +1826,6 @@ ALTER TABLE ONLY public.recurring_expenses
 
 
 --
--- Name: resource_library_posts resource_library_posts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.resource_library_posts
-    ADD CONSTRAINT resource_library_posts_pkey PRIMARY KEY (id);
-
-
---
 -- Name: revenues revenues_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2477,13 +2453,6 @@ CREATE INDEX idx_recurring_expenses_type ON public.recurring_expenses USING btre
 
 
 --
--- Name: idx_resource_library_posts_created_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_resource_library_posts_created_at ON public.resource_library_posts USING btree (created_at DESC);
-
-
---
 -- Name: idx_revenues_channel; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2796,13 +2765,6 @@ CREATE TRIGGER project_notes_updated_at BEFORE UPDATE ON public.project_notes FO
 --
 
 CREATE TRIGGER projects_updated_at BEFORE UPDATE ON public.projects FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
-
-
---
--- Name: resource_library_posts resource_library_posts_updated_at; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER resource_library_posts_updated_at BEFORE UPDATE ON public.resource_library_posts FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
 
 
 --
@@ -3361,14 +3323,6 @@ ALTER TABLE ONLY public.recurring_expenses
 
 
 --
--- Name: resource_library_posts resource_library_posts_author_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.resource_library_posts
-    ADD CONSTRAINT resource_library_posts_author_employee_id_fkey FOREIGN KEY (author_employee_id) REFERENCES public.employees(id) ON DELETE SET NULL;
-
-
---
 -- Name: revenues revenues_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3711,13 +3665,6 @@ CREATE POLICY "Authenticated users can delete recurring_expenses" ON public.recu
 
 
 --
--- Name: resource_library_posts Authenticated users can delete resource_library_posts; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can delete resource_library_posts" ON public.resource_library_posts FOR DELETE USING ((auth.role() = 'authenticated'::text));
-
-
---
 -- Name: revenues Authenticated users can delete revenues; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3932,13 +3879,6 @@ CREATE POLICY "Authenticated users can insert projects" ON public.projects FOR I
 --
 
 CREATE POLICY "Authenticated users can insert recurring_expenses" ON public.recurring_expenses FOR INSERT TO authenticated WITH CHECK (true);
-
-
---
--- Name: resource_library_posts Authenticated users can insert resource_library_posts; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can insert resource_library_posts" ON public.resource_library_posts FOR INSERT WITH CHECK ((auth.role() = 'authenticated'::text));
 
 
 --
@@ -4369,13 +4309,6 @@ CREATE POLICY "Authenticated users can update recurring_expenses" ON public.recu
 
 
 --
--- Name: resource_library_posts Authenticated users can update resource_library_posts; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can update resource_library_posts" ON public.resource_library_posts FOR UPDATE USING ((auth.role() = 'authenticated'::text));
-
-
---
 -- Name: revenues Authenticated users can update revenues; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -4492,13 +4425,6 @@ CREATE POLICY "Authenticated users can view project_assignees" ON public.project
 --
 
 CREATE POLICY "Authenticated users can view projects" ON public.projects FOR SELECT USING ((auth.role() = 'authenticated'::text));
-
-
---
--- Name: resource_library_posts Authenticated users can view resource_library_posts; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Authenticated users can view resource_library_posts" ON public.resource_library_posts FOR SELECT USING ((auth.role() = 'authenticated'::text));
 
 
 --
@@ -4857,12 +4783,6 @@ ALTER TABLE public.quotations ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.recurring_expenses ENABLE ROW LEVEL SECURITY;
-
---
--- Name: resource_library_posts; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.resource_library_posts ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: revenues; Type: ROW SECURITY; Schema: public; Owner: -
@@ -5396,15 +5316,6 @@ GRANT ALL ON TABLE public.quotations TO service_role;
 GRANT ALL ON TABLE public.recurring_expenses TO anon;
 GRANT ALL ON TABLE public.recurring_expenses TO authenticated;
 GRANT ALL ON TABLE public.recurring_expenses TO service_role;
-
-
---
--- Name: TABLE resource_library_posts; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.resource_library_posts TO anon;
-GRANT ALL ON TABLE public.resource_library_posts TO authenticated;
-GRANT ALL ON TABLE public.resource_library_posts TO service_role;
 
 
 --

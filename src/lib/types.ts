@@ -202,22 +202,6 @@ export type CustomerNoteUpdate = Partial<
   Omit<CustomerNoteInsert, "customer_id" | "author_employee_id" | "author_name">
 >;
 
-export interface ResourceLibraryPost {
-  id: string;
-  title: string;
-  content: string;
-  drive_folder_id: string | null;
-  author_employee_id: string | null;
-  author_name: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export type ResourceLibraryPostInsert = Omit<
-  ResourceLibraryPost,
-  "id" | "created_at" | "updated_at" | "drive_folder_id" | "author_employee_id" | "author_name"
->;
-
 export type RevenueChannel = "아임웹" | "자사몰" | "기타";
 
 export interface Revenue {
