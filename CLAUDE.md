@@ -67,9 +67,15 @@
      `인식되지 않습니다` 로 안 잡히면 PATH 미갱신 문제다 → **재시작 시키지 말고, 네가 `npm prefix -g` 로 경로를 찾아
      `<prefix>\supabase.cmd` 풀패스로 비대화형 명령(`--version`/`projects list` 등)을 직접 실행**한다(위 진행 원칙 ⚠️ 절차).
      단 **`login` 은 풀패스 `!` 로 하지 말고** 사용자가 새 터미널에서 `supabase login` 을 직접 실행하게 한다(브라우저 필요).
-1. **코드 받기 (URL 만 받은 경우)** — 사용자가 폴더를 안 열고 GitHub 주소만 줬다면 먼저 클론한다:
-   `git clone https://github.com/youn-yong-seung/yunbiseo-template.git my-secretary` 후 그 폴더로 이동한다.
-   이미 이 폴더가 열려 있으면(= `package.json` 이 보이면) 이 단계는 건너뛴다. 이어서 `npm install` 을 실행한다.
+1. **코드 받기 (URL 만 받은 경우)** — 이미 이 폴더가 열려 있으면(= `package.json` 이 보이면) 건너뛰고
+   `npm install` 로 넘어간다. GitHub 주소만 받았다면 **지금 열려 있는 폴더가 비어 있는지 먼저 확인**한다.
+   - **비어 있으면(수강생의 기본 경로) 현재 폴더에 그대로 받는다:**
+     `git clone https://github.com/youn-yong-seung/yunbiseo-template.git .` ← **끝의 점을 빠뜨리지 않는다.**
+     사용자가 만든 폴더(예: `우리회사-시스템`)가 곧 프로젝트 루트가 되어야 한다. 하위에 `yunbiseo-template/`
+     같은 폴더를 한 겹 더 만들면 **폴더 이름이 사람마다 달라지고, 1-2단계의 저장소 이름까지 원본과 같아져**
+     수업 진행과 안내가 어긋난다.
+   - **비어 있지 않으면** 충돌하므로 하위 폴더로 받는다: `git clone <url> my-secretary` 후 그 폴더로 이동한다.
+   - 어느 쪽이든 클론이 끝나면 프로젝트 루트에서 `npm install` 을 실행한다.
 1-2. **내 GitHub 저장소 만들기 (권장, 건너뛰기 가능)** — 커스텀 내역을 백업하고 과제 인증·Vercel 연동에 쓸
    **사용자 소유 비공개 저장소**를 만든다. 순서:
    - `gh auth status` 로 로그인 확인. 미로그인이면 **사용자가 새 터미널에서 `gh auth login` 을 직접 실행**하게
@@ -77,6 +83,9 @@
      프롬프트는 GitHub.com → HTTPS → Login with a web browser 선택 안내).
    - 로그인 확인 후 **네가 직접** 실행한다: `git remote rename origin template` →
      `gh repo create <폴더명> --private --source=. --push`. 이름 충돌 시 다른 이름을 제안한다.
+     **`<폴더명>` 이 `yunbiseo-template` 이면(= 1단계에서 점 없이 클론된 경우) 그대로 쓰지 말고**
+     사용자에게 회사 이름을 넣은 저장소 이름을 제안해 확인받는다(예: `우리회사-시스템`). 원본과 같은 이름은
+     나중에 본인 저장소인지 템플릿인지 구분이 안 된다.
    - 완료 후 origin=내 저장소, template=원본임을 알려주고, 이후 작업 커밋은 `git push` 로 백업됨을 안내한다.
    - 사용자가 원치 않거나 GitHub 계정이 없으면 건너뛴다(나중에 "내 GitHub 저장소 만들어줘" 로 재개).
 2. **Supabase 로그인 (사용자가 새 터미널에서 직접)** — **`!` 로 시키지 말고**, 사용자에게
