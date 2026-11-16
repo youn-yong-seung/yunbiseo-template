@@ -30,6 +30,44 @@ function extractApiKey(request: NextRequest): string {
   return "";
 }
 
+export interface ApiKeyRecord {
+  id: string;
+  name: string;
+  /** 키를 만든 직원 이름. yb login 으로 받은 키면 로그인한 직원이다. */
+  created_by: string | null;
+}
+
+/**
+ * validateApiKey 와 같지만, 통과하면 키 정보(만든 직원 이름 포함)를 돌려준다.
+ * "me"(내 할 일), 작성자 기록처럼 누가 부른 요청인지 알아야 하는 API 가 쓴다.
+ * 환경변수 REVENUE_API_KEY 로 통과하면 직원을 알 수 없어 created_by 가 null 이다.
+ */
+export async function validateApiKeyRecord(request: NextRequest): Promise<ApiKeyRecord | null> {
+  const key = extractApiKey(request);
+  if (!key) return null;
+
+  const envKey = process.env.REVENUE_API_KEY;
+  if (envKey && key === envKey) return { id: "env", name: "REVENUE_API_KEY", created_by: null };
+
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("api_keys")
+    .select("id, name, created_by")
+    .eq("key_hash", hashApiKey(key))
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (error || !data) return null;
+
+  supabase
+    .from("api_keys")
+    .update({ last_used_at: new Date().toISOString() })
+    .eq("id", data.id)
+    .then();
+
+  return data as ApiKeyRecord;
+}
+
 /**
  * 요청에서 API Key를 추출하고 DB 해시 비교로 검증한다.
  * 유효하면 last_used_at을 갱신하고 true를 반환한다.

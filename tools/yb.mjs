@@ -34,6 +34,10 @@ const STUDENT_COMMANDS = {
   help: true, "--help": true, "-h": true,
   version: true, "--version": true, "-v": true,
   update: true, login: true, whoami: true, auth: true, api: true,
+  customer: ["list", "get", "create", "update", "contact", "contacts"],
+  project: ["list", "create", "update", "status", "undo", "history", "notes", "note-add"],
+  task: ["list", "get", "create", "update", "delete"],
+  give: true, given: true, done: true, do: true, due: true,
   expense: ["list", "get", "create", "update"],
   deposit: ["list", "get", "create", "update", "delete"],
   revenue: ["create"],
@@ -929,7 +933,33 @@ const STUDENT_HELP = `yb — 윤비서 CLI (수강생판, AI 에이전트 친화
   yb meeting create --transcript 전사록 [--title 제목]
   yb api GET|POST|PATCH|DELETE /api/경로 [--q '{"key":"value"}'] [--json '{...}']
 
-고객·프로젝트·할일·세금계산서·법인카드 명령은 템플릿 업데이트와 함께 열린다.
+고객
+  yb customer list [--q 검색어] [--type 개인|개인사업자|법인] [--limit N]
+  yb customer get <고객id|이름>               고객 한 명 + 담당자 목록
+  yb customer create --name 이름 [--type 개인|개인사업자|법인] [--phone] [--email] [--memo]
+      · 같은 이름이 있으면 새로 만들지 않고 기존 고객을 돌려준다(created:false)
+  yb customer update <id> [--name] [--type] [--phone] [--email] [--memo]
+  yb customer contact list|add|update|delete <고객> ...   담당자 (add --name 이름 [--position] [--phone] [--email])
+
+프로젝트 (번호는 YY-N, 예: 26-3)
+  yb project list [--q 검색어|번호] [--status 진행중] [--limit N]
+  yb project create --name 이름 [--type 유형이름] [--customer-id 고객id] [--status] [--start YYYY-MM-DD] [--end] [--manager]
+  yb project update <번호|id> [--name] [--type] [--customer-id] [--start] [--end] [--manager] [--description]
+  yb project status <번호> <진행예정|진행중|완료|보류|취소> [-m 이유]   단계 바꾸기, 이력에 바꾼 사람·이유가 남는다
+  yb project undo <번호> [-m 이유]           직전 단계로 되돌리기
+  yb project history <번호>                  단계 이력
+  yb project notes <번호>                    메모 보기
+  yb project note-add <번호> --content "본문"   메모 쓰기(첫 줄이 제목)
+
+할 일 (번호는 2001부터)
+  yb give <담당자|나> "지시 그대로" [--due 내일|금|3일|11-20] [--project 26-3] [--priority 높음]
+  yb given                                  내가 맡긴 일
+  yb do <번호…>  /  yb done <번호…> [--note "결과"]  /  yb due <번호> <언제>
+  yb task list [--assignee me|이름] [--requester me|이름] [--status "할 일,진행중"] [--due-before YYYY-MM-DD] [--sort due]
+  yb task get|update|delete <번호>
+  yb task create --title 제목 [--due YYYY-MM-DD] [--priority 높음|보통|낮음] [--assignee 이름] [--project 프로젝트id]
+
+세금계산서·법인카드 명령은 템플릿 업데이트와 함께 열린다.
 `;
 
 const UPDATE_HELP = {
@@ -1176,7 +1206,10 @@ async function resolveProjectId(ref) {
   return match.id;
 }
 
-const PROJECT_STAGES = ["상담중", "견적발송", "계약완료", "준비중", "진행중", "완료", "보류", "취소"];
+// 수강생 템플릿은 단계가 더 단순하다(템플릿 src/lib/project-status.ts 와 같아야 한다).
+const PROJECT_STAGES = IS_STUDENT
+  ? ["진행예정", "진행중", "완료", "보류", "취소"]
+  : ["상담중", "견적발송", "계약완료", "준비중", "진행중", "완료", "보류", "취소"];
 
 function kstStamp(iso) {
   const d = new Date(new Date(iso).getTime() + 9 * 3600 * 1000);
@@ -1474,7 +1507,9 @@ async function main() {
       if (sub === "list") {
         printJson(await request("GET", "/api/projects", { query: listQuery(flags) }));
       } else if (sub === "create") {
-        if (!flags.json && (!flags.name || !flags.type)) fail("--name 과 --type(에이전시|교육|콘텐츠|내부|기타) 이 필요합니다");
+        // 수강생 템플릿은 유형이 선택이다(유형 목록도 각자 만든다).
+        if (IS_STUDENT && !flags.json && !flags.name) fail("--name 이 필요합니다");
+        if (!IS_STUDENT && !flags.json && (!flags.name || !flags.type)) fail("--name 과 --type(에이전시|교육|콘텐츠|내부|기타) 이 필요합니다");
         printJson(await request("POST", "/api/projects", { body: buildBody(flags, PROJECT_CREATE_FIELDS) }));
       } else if (sub === "update") {
         if (isHelpRequested(flags)) {

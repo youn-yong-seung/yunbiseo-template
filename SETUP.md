@@ -300,7 +300,7 @@ vercel --prod
 ## 8. (선택) yb CLI 로 AI 에게 윤비서 일 맡기기
 
 `yb` 는 윤비서를 터미널 명령으로 다루는 도구입니다. Claude Code·Codex 같은 AI 가 이걸로
-윤비서에 매입·입금·매출을 대신 등록하고 조회합니다. 이 저장소의 `tools/yb.mjs` 에 들어 있어
+윤비서의 고객·프로젝트·할 일·매입·입금·매출을 대신 등록하고 조회합니다. 이 저장소의 `tools/yb.mjs` 에 들어 있어
 따로 설치할 것이 없습니다.
 
 ```bash
@@ -319,6 +319,8 @@ yb help
   (`~/.config/yunbiseo-template/config.json`). 발급된 키는 시스템 설정 → API 키 목록에 `yb-cli <컴퓨터 이름>` 으로 보입니다.
 - 브라우저가 자동으로 안 돌아오면 `yb login --url <주소> --manual` 로 코드를 복사해 붙여넣습니다.
 - `npm link` 가 권한 오류로 막히면 `npm run yb -- help` 처럼 저장소 폴더에서 실행해도 됩니다.
+- 자주 쓰는 말: `yb give 나 "견적서 보내기" --due 내일` (할 일 맡기기, 번호가 2001부터 붙음) → `yb done 2001 --note "보냄"`,
+  `yb project status 26-1 진행중 -m "계약 완료"` (단계 바꾸기, 이력이 남음), `yb customer create --name 고객이름`.
 - AI 에게는 "yb help 읽고 이번 달 매입 목록 보여줘" 처럼 시키면 됩니다. **AI 가 `yb login` 을 직접 실행하게 하지 마세요**(브라우저 창이 반복해서 뜹니다). 이름 확인은 `yb whoami` 입니다.
 - 저장소를 `git pull` 하면 yb 도 같이 최신이 됩니다. `tools/yb.mjs` 는 자동 생성 파일이라 직접 고치지 않습니다.
 
