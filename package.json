@@ -2,13 +2,17 @@
   "name": "yun-secretary-template",
   "version": "0.1.0",
   "private": true,
+  "bin": {
+    "yb": "tools/yb.mjs"
+  },
   "scripts": {
     "predev": "node scripts/dev-login-banner.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "setup:admin": "node scripts/create-admin.mjs"
+    "setup:admin": "node scripts/create-admin.mjs",
+    "yb": "node tools/yb.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

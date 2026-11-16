@@ -297,6 +297,33 @@ vercel --prod
 
 ---
 
+## 8. (선택) yb CLI 로 AI 에게 윤비서 일 맡기기
+
+`yb` 는 윤비서를 터미널 명령으로 다루는 도구입니다. Claude Code·Codex 같은 AI 가 이걸로
+윤비서에 매입·입금·매출을 대신 등록하고 조회합니다. 이 저장소의 `tools/yb.mjs` 에 들어 있어
+따로 설치할 것이 없습니다.
+
+```bash
+# 1) yb 명령 등록 (저장소 폴더에서 처음 한 번)
+npm link
+
+# 2) 내 윤비서에 로그인 (처음 한 번, 브라우저가 열립니다 — 일반 터미널에서 실행)
+yb login --url http://localhost:3000          # 배포했다면 https://<프로젝트명>.vercel.app
+
+# 3) 확인
+yb whoami
+yb help
+```
+
+- 브라우저에서 윤비서 로그인 → **"이 컴퓨터에서 yb CLI 인증"** 을 누르면 API 키가 자동으로 발급·저장됩니다
+  (`~/.config/yunbiseo-template/config.json`). 발급된 키는 시스템 설정 → API 키 목록에 `yb-cli <컴퓨터 이름>` 으로 보입니다.
+- 브라우저가 자동으로 안 돌아오면 `yb login --url <주소> --manual` 로 코드를 복사해 붙여넣습니다.
+- `npm link` 가 권한 오류로 막히면 `npm run yb -- help` 처럼 저장소 폴더에서 실행해도 됩니다.
+- AI 에게는 "yb help 읽고 이번 달 매입 목록 보여줘" 처럼 시키면 됩니다. **AI 가 `yb login` 을 직접 실행하게 하지 마세요**(브라우저 창이 반복해서 뜹니다). 이름 확인은 `yb whoami` 입니다.
+- 저장소를 `git pull` 하면 yb 도 같이 최신이 됩니다. `tools/yb.mjs` 는 자동 생성 파일이라 직접 고치지 않습니다.
+
+---
+
 ## 자주 막히는 곳
 
 - **`supabase db push` 에서 권한/연결 오류** → `supabase login` 과

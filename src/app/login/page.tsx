@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import { LockKeyhole, UserRound } from "lucide-react";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,7 +13,15 @@ import { Label } from "@/components/ui/label";
 import { sendLog } from "@/lib/log-client";
 import { createClient } from "@/lib/supabase/client";
 
-export default function LoginPage() {
+function LoginPageInner() {
+  const searchParams = useSearchParams();
+  const returnToParam = searchParams.get("returnTo");
+  // 내부 경로만 허용한다(외부 주소로 튕기는 것 방지).
+  const returnTo =
+    returnToParam &&
+    (returnToParam.startsWith("/dashboard/") || returnToParam.startsWith("/cli-auth"))
+      ? returnToParam
+      : "/dashboard/workspace";
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
@@ -128,7 +136,7 @@ export default function LoginPage() {
       localStorage.removeItem("rememberMe");
     }
 
-    router.push("/dashboard/workspace");
+    router.push(returnTo);
     sendLog("LOGIN", "Login succeeded");
     router.refresh();
   };
@@ -226,5 +234,13 @@ export default function LoginPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageInner />
+    </Suspense>
   );
 }

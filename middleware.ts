@@ -59,8 +59,12 @@ export async function middleware(request: NextRequest) {
     !pathname.startsWith("/login") &&
     !pathname.startsWith("/auth")
   ) {
+    // 로그인 후 원래 목적지(예: yb login 인증 화면)로 돌아올 수 있도록 returnTo 를 보존한다.
+    const returnTo = pathname + request.nextUrl.search;
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    url.search = "";
+    url.searchParams.set("returnTo", returnTo);
     return redirectWithSupabaseCookies(url, supabaseResponse);
   }
 

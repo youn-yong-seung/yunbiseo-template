@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateApiKey, hashApiKey, getKeyPrefix } from "@/lib/api-key";
-import { encryptApiKey } from "@/lib/api-key-secret";
+import { issueApiKey } from "@/lib/api-key-issue";
 import { logInfo } from "@/lib/logger";
 import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
 
@@ -54,26 +53,16 @@ export async function POST(request: NextRequest) {
 
     const createdBy = employee?.name ?? user.email ?? "Unknown";
 
-    const rawKey = generateApiKey();
-    const keyHash = hashApiKey(rawKey);
-    const keyPrefix = getKeyPrefix(rawKey);
-    const keyEncrypted = encryptApiKey(rawKey);
-
-    const { data, error } = await supabase
-      .from("api_keys")
-      .insert({
-        name,
-        key_hash: keyHash,
-        key_prefix: keyPrefix,
-        key_encrypted: keyEncrypted,
-        created_by: createdBy,
-      })
-      .select("id, name, key_prefix, created_by, created_at")
-      .single();
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    let issued;
+    try {
+      issued = await issueApiKey(supabase, { name, createdBy });
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "API 키 생성에 실패했습니다." },
+        { status: 500 }
+      );
     }
+    const { raw_key: rawKey, ...data } = issued;
 
     logInfo("CREATE_API_KEY", `API 키 생성: ${name}`, { resource: "api_key", resource_id: data.id, actor_id: user.id });
     // 원본 Key는 이 응답에서만 1회 제공
