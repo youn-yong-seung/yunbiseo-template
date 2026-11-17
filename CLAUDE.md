@@ -119,10 +119,11 @@
    - (기존 프로젝트를 골랐고 비밀번호를 모르면) 이때만 사용자에게 한 번 입력받아 `.env.local` 에 저장한 뒤 진행한다.
    - `project not ready`/연결 오류면 프로젝트 준비(1~2분)를 기다렸다가, 또는 login/link 를 재확인 후 재시도한다.
 6. **첫 관리자 생성** — 이 앱은 **회원가입 화면이 없다.** 로그인 계정은 이 단계로 만드는 관리자 1개로 시작한다.
-   `npm run setup:admin` 만 실행하면 **고정 기본 계정 `admin` / `jadong!`** 로 생성된다(외우기 쉬운 강의용 기본값).
-   사용자에게 **ID `admin`, 비밀번호 `jadong!`** 를 또렷하게 알린다. (직원 추가는 로그인 후 [직원관리] 화면에서.)
-7. **실행 & 로그인** — `npm run dev` 를 백그라운드로 띄운다. 시작 시 `admin / jadong!` 가 배너로 강조 출력된다.
-   http://localhost:3000 에서 **이메일이 아니라 ID `admin` / 비밀번호 `jadong!`** 로 로그인하라고 알린다.
+   `npm run setup:admin` 을 실행하면 ID `admin` 과 **무작위 비밀번호**(예: `jadong-k7m2-x9qp`)가 만들어지고 한 번만 출력된다.
+   이 비밀번호는 사용자가 로그인에 써야 하므로 **사용자에게 그대로 알려 주고 메모하라고 안내한다**(공개 저장소에 적힌 고정
+   비밀번호는 쓰지 않는다 — 배포본에 누구나 관리자로 들어오는 문제가 있었다). (직원 추가는 로그인 후 [직원관리] 화면에서.)
+7. **실행 & 로그인** — `npm run dev` 를 백그라운드로 띄운다.
+   http://localhost:3000 에서 **이메일이 아니라 ID `admin`** 과 6단계 비밀번호로 로그인하라고 알린다.
    로그인 직후 **왼쪽 사이드바 맨 아래 '내 이름' 클릭 → 마이페이지(`/dashboard/my`)에서 비밀번호를 꼭 바꾸라고** 안내한다.
 8. **완료** — 축하 인사와 함께, 회사정보·외부연동(Gemini/Bolta/Slack)은 **선택(심화)** 이며
    `SETUP.md` 6장 또는 [시스템설정] 화면에서 나중에 켤 수 있다고 알린다.
@@ -137,8 +138,9 @@
 
 1. **로그인 확인** — `vercel whoami` 실행. 미로그인이면 **사용자가 새 터미널에서 `vercel login` 을 직접 실행**하게
    안내한다(브라우저 인증 — `supabase login`/`gh auth login` 과 같은 이유로 `!` 비대화형 금지).
-2. **비밀번호 점검** — 기본 비밀번호(`jadong!`)를 아직 쓰는지 물어본다. 배포하면 URL 을 아는 누구나 로그인
-   화면에 접근하므로, 기본값이면 **배포 전에 마이페이지에서 변경**하도록 안내한다(강제는 아님).
+2. **비밀번호·가입 점검** — 배포하면 URL 을 아는 누구나 로그인 화면에 접근한다. 관리자 비밀번호를 남과 공유했다면
+   **배포 전에 마이페이지에서 변경**하도록 안내한다. Supabase 대시보드 → Authentication → Sign In / Providers →
+   "Allow new users to sign up" 끄기도 권한다(직원이 아닌 계정은 서버·DB 정책이 막지만 한 겹 더 막는다).
 3. **프로젝트 연결** — `vercel link --yes` 를 네가 실행한다(첫 실행 시 폴더명으로 프로젝트 자동 생성).
    ⚠️ **Vercel 프로젝트 이름은 소문자 영숫자와 `.` `_` `-` 만 허용된다.** 폴더 이름이 한글이거나 대문자·공백을
    포함하면 `invalid_project_name` 으로 실패한다(수강생 폴더명이 `우리회사-시스템` 같은 경우가 흔하다).
@@ -170,14 +172,72 @@
 - `supabase db push` 가 `project not ready`/연결 오류 → 새 프로젝트 준비(1~2분)를 기다린 뒤,
   `supabase link --project-ref <ref>` (DB 비밀번호) 를 재확인하고 재시도.
 - `npm run build` 실패 → `.env.local` 의 Supabase 값(URL/anon/service_role)이 채워졌는지 확인 (빌드에 필요).
-- `setup:admin` 이 비밀번호 길이 오류 → 비밀번호는 **6자 이상**이어야 한다(Supabase Auth 기본 정책).
-- 로그인 안 됨 → ① 이메일이 아니라 **ID(`admin`)** 로 시도했는지 확인, ② `npm run setup:admin -- admin <새비밀번호>` 로 재설정.
+- `setup:admin` 이 비밀번호 길이 오류 → 직접 줄 때는 **10자 이상**. 비워 두면 무작위로 만든다.
+- 로그인 안 됨 → ① 이메일이 아니라 **ID(`admin`)** 로 시도했는지 확인, ② `npm run setup:admin` 을 다시 실행해 새 비밀번호를 받는다.
+  "15분 동안 로그인할 수 없습니다" 는 5번 틀려 잠긴 것이다(15분 뒤 풀림, 계정이 비활성화되지는 않는다).
 - **`gh auth login`/`vercel login` 이 브라우저를 안 열고 코드/토큰을 요구** → 비대화형(`!`)에서 돌려서다.
   supabase 와 동일하게 **사용자가 새 터미널에서 직접** 실행하게 한다. (`gh` 는 device code 가 떠도 브라우저에서
   코드 입력으로 진행 가능하니, 뜨면 그 코드를 안내한다.)
 - `gh repo create` 가 "Name already exists" → 다른 저장소 이름을 제안해 재시도.
 - `vercel env add` 가 값 입력 프롬프트에서 멈춤 → 대화형이라서다. `printf '%s' "<값>" | vercel env add <KEY> production` 으로 파이프해 비대화형으로 실행한다.
 - Vercel 배포는 됐는데 화면이 에러 → 환경변수 4개가 production 에 등록됐는지 `vercel env ls` 로 확인 후 재배포.
+
+---
+
+## 🤖 윤비서 CLI(yb) 설치 도우미
+
+**트리거:** "윤비서 CLI 설치해줘", "yb 설치해줘", "AI 앱이랑 윤비서 연결해줘", "윤비서 연결해줘", `/yb-setup`.
+사람용 안내서는 `docs/YB_CLI_START.md` 다. 이 절차가 AI 용 정본이다(Codex 는 `AGENTS.md` 가 여기를 가리킨다).
+
+### 진행 원칙
+- 사용자는 대부분 비개발자다. 한 번에 한 단계, 쉬운 말로, 결과를 확인하고 넘어간다.
+- **API 키·비밀번호를 채팅에 다시 출력하지 않는다.** 출력에 키가 섞이면 앞 8자만 보인다.
+- **`yb login` 은 연결할 때 딱 한 번만** 실행한다(브라우저가 뜬다). 그 뒤로 "나"는 항상 `yb whoami` 로 확인한다.
+  `whoami` 가 실패해도 `yb login` 을 반복하지 말고 원인을 알려 준다.
+
+### 단계
+1. **Node 확인** — `node -v` 가 v18 이상이면 통과. 없으면 OS 에 맞춰 설치를 안내한다
+   (Windows `winget install --id OpenJS.NodeJS.LTS -e`, macOS `brew install node` 또는 https://nodejs.org LTS).
+   설치 직후 같은 창에서 안 잡히면 초기 설정 도우미의 PATH 처리와 같은 방식으로 풀패스를 쓴다.
+2. **yb 설치** — 둘 중 하나.
+   - 지금 폴더가 윤비서 저장소면(`package.json` 의 name 이 `yun-secretary-template`, `tools/yb.mjs` 있음): `npm link`.
+     권한 오류면 `npm run yb -- <명령>` 으로 대신 쓴다.
+   - 저장소가 없으면(강사·테스트 환경): 파일 하나만 받는다.
+     - macOS/Linux: `mkdir -p ~/.yb ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/youn-yong-seung/yunbiseo-template/main/tools/yb.mjs -o ~/.yb/yb.mjs && printf '#!/bin/sh\nexec node "$HOME/.yb/yb.mjs" "$@"\n' > ~/.local/bin/yb && chmod +x ~/.local/bin/yb`
+       (`~/.local/bin` 이 PATH 에 없으면 `node ~/.yb/yb.mjs` 로 부른다.)
+     - Windows(PowerShell): `New-Item -ItemType Directory -Force $HOME\.yb | Out-Null; Invoke-WebRequest https://raw.githubusercontent.com/youn-yong-seung/yunbiseo-template/main/tools/yb.mjs -OutFile $HOME\.yb\yb.mjs`
+       이후 `node $HOME\.yb\yb.mjs <명령>` 으로 부른다.
+   - 확인: `yb version` (또는 `node ~/.yb/yb.mjs version`).
+3. **주소·키 받기** — 윤비서 주소를 묻는다(예: `https://우리회사.vercel.app`, 로컬이면 `http://localhost:3000`).
+   키는 사용자가 이미 줬으면 그걸 쓰고, 없으면 두 길을 제안한다.
+   - 키 방식: "윤비서 로그인 → 왼쪽 사이드바 맨 아래 '내 이름' → 마이페이지 → '내 API 키' → [새 API 키 만들기] → 복사" 를 안내.
+   - 브라우저 방식(키를 채팅에 안 붙임): `yb login --url <주소>` 를 **한 번** 실행하고(최대 5분 대기, 타임아웃 넉넉히),
+     사용자에게 열린 브라우저에서 로그인 후 **[이 컴퓨터에서 yb CLI 인증]** 을 누르라고 한다.
+4. **연결** — 키 방식이면 `yb auth --key <키> --url <주소>`. 이 명령이 서버에 키 주인을 확인하고, 틀리면 저장하지 않는다.
+5. **확인** — `yb whoami` 결과의 `employee`(이름)를 사용자에게 알려 준다. 이어서 `yb today` 를 보여 주며 끝낸다.
+6. **안내** — "이제 '오늘 일정 알려줘', '다음 주 화요일 2시 미팅 추가해줘' 처럼 말하면 된다"고 알리고,
+   `docs/YB_CLI_START.md` 3단계 표를 짧게 보여 준다.
+
+### 연결된 뒤 말 → 명령 (모든 출력은 JSON 이니 사람 말로 요약해서 답한다)
+- 오늘 일정·할 일: `yb today` (내 열린 할 일 + 오늘 내 일정).
+- 기간 일정: `yb schedule list --from <날짜> --to <날짜> --assignee me`. 날짜는 `YYYY-MM-DD`·`오늘`·`내일`·`금`·`"다음주 화"`·`11-25`.
+- 일정 추가: `yb schedule create --title "<제목>" --date "<날짜>" --time HH:MM [--duration-min 60] [--location] [--category meeting]`.
+  **시각을 모르면 추측하지 말고 묻는다.** 미팅이면 `--category meeting`. 담당자를 안 주면 나(키 주인)가 담당자다.
+- 일정 수정·삭제: 먼저 `schedule list` 로 id 를 찾고 `yb schedule update <id> ...` / `yb schedule delete <id>`. 삭제는 한 번 확인받는다.
+- 매출 등록: `yb revenue create --title "<내용>" --total <부가세 포함 총액> [--project 26-3] [--date YYYY-MM-DD]`.
+  공급가만 들었으면 총액(×1.1)인지 확인한다.
+- 고객 전화번호: `yb customer get <고객 이름>` → `contact_phone`, 담당자는 `contacts[]`.
+- 세금계산서 상태: `yb revenue list --q <검색어>` 로 매출 id 를 찾고 `yb revenue tax-invoice status <매출id>`.
+  `taxInvoiceState`(not_issued/issuing/issued/failed)와 `blockedReasons` 를 쉬운 말로 전한다.
+  **발행(`issue --yes`)은 외부 발행이다. 미리보기를 보여 주고 사용자가 "발행해"라고 한 뒤에만 한다.**
+- 할 일: `yb give <담당자|나> "<지시>" --due <언제>`, `yb done <번호> --note "<결과>"`, `yb given`.
+- 쓸 수 있는 명령 전체: `yb help`.
+
+### 자주 나는 문제
+- `yb auth --key` 가 "연결하지 못했습니다" → 주소 오타(끝의 `/`·`http/https`), 키 일부만 복사, 서버 꺼짐(`localhost` 면 `npm run dev`) 순서로 본다.
+- `HTTP 401` → 키가 지워졌거나 직원 계정이 비활성. 새 키를 만들게 안내한다. 관리자에게 계정 상태 확인.
+- `HTTP 403` → 권한 밖(남이 만든 일정·할 일 수정, 관리자 전용 기능). 우회하지 말고 사용자에게 그대로 알린다.
+- "수강생판에서는 아직 지원하지 않는 명령" → 템플릿에 없는 기능이다. `yb help` 범위 안에서 한다.
 
 ---
 
@@ -192,7 +252,17 @@
 ## 포함 기능 (메뉴)
 
 워크스페이스 · 고객관리 · 프로젝트관리 · 할일관리 · 일정관리 · 미팅관리 · 견적관리 ·
-매출관리 · 입금관리 · 매입관리 · 영업이익분석 · 직원관리 · 시스템설정 · 마이페이지
+매출관리 · 입금관리 · 매입관리 · 법인카드 · 영업이익분석 · 직원관리 · 시스템설정 · 마이페이지(내 API 키)
+
+## 🔐 보안 규칙 (코드를 고칠 때 지킬 것)
+
+- 누가 무엇을 볼 수 있는지의 기준은 `supabase/migrations/20261118000000_security_hardening.sql` 머리말과 같다.
+  회사 공용 데이터(고객·프로젝트·매출 등)는 **활성 직원**만, 할 일·일정·메모 수정은 만든 사람·담당자·관리자만,
+  직원 관리·시스템 설정·남의 API 키는 관리자만, API 키·구글 토큰·외부 서비스 키는 서버만 다룬다.
+- 새 API 라우트는 첫 줄에서 `requireRouteUser` / `requireRouteAdmin` / `requireRouteUserOrApiKey`(`src/lib/route-auth.ts`)로 막는다.
+  `createAdminClient()`(service role, RLS 우회)는 그 확인을 통과한 뒤에만 쓴다.
+- 새 테이블은 같은 사이클에서 RLS 를 켜고 정책을 만든다(`public.is_active_employee()` 등 판정 함수 사용). anon 에는 권한을 주지 않는다.
+- cron·웹훅은 비밀이 없으면 거부한다(`verifyCronSecret`). 응답에 DB 오류 원문을 싣지 않는다(`publicErrorMessage`, `dbError`).
 
 > 회사 정보(상호/대표자/사업자번호/계좌)는 비어 있다. 견적서를 쓰려면
 > `src/lib/quotation-constants.ts` 에서 값을 채운다.
