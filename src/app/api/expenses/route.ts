@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { publicErrorMessage } from "@/lib/safe-error";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { validateApiKey } from "@/lib/api-key";
+import { validateApiKeyRecord } from "@/lib/api-key";
+import { forbiddenResponse } from "@/lib/route-auth";
 import { logInfo } from "@/lib/logger";
 import { calcWithholding } from "@/lib/expenses/tax";
 import type { VendorTaxCategory } from "@/lib/types";
@@ -67,7 +68,7 @@ function parseDate(value: unknown, fieldName: string): string | null {
 
 export async function GET(request: NextRequest) {
   try {
-    const isValid = await validateApiKey(request);
+    const isValid = await validateApiKeyRecord(request);
     if (!isValid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -102,10 +103,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const isValid = await validateApiKey(request);
-    if (!isValid) {
+    const apiKey = await validateApiKeyRecord(request);
+    if (!apiKey) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const canSettle = apiKey.employee.isAdmin || apiKey.employee.is_finance;
 
     const body = await request.json();
 
@@ -174,6 +176,10 @@ export async function POST(request: NextRequest) {
 
     const purchaseDate = parseDate(body.purchase_date ?? body.expense_date, "purchase_date");
     const paymentDate = parseDate(body.payment_date ?? body.paid_date, "payment_date");
+    // 지급일을 넣으면 '지급완료'로 등록된다. 지급 처리는 관리자·재무만 한다.
+    if (paymentDate && !canSettle) {
+      return forbiddenResponse("지급완료 매입은 관리자 또는 재무 담당만 등록할 수 있습니다. 지급일 없이 등록한 뒤 요청하세요.");
+    }
     const purchaseTaxInvoiceReceived = parseBoolean(body.purchase_tax_invoice_received, false);
     const purchaseTaxInvoiceNotRequired = parseBoolean(body.purchase_tax_invoice_not_required, false);
     const purchaseTaxInvoiceDate = parseDate(body.purchase_tax_invoice_date, "purchase_tax_invoice_date");

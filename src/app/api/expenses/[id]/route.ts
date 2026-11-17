@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { publicErrorMessage } from "@/lib/safe-error";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { validateApiKey } from "@/lib/api-key";
+import { validateApiKeyRecord } from "@/lib/api-key";
+import { forbiddenResponse } from "@/lib/route-auth";
+
+// 승인·지급 예정·지급완료된 매입은 관리자·재무만 고치거나 지운다(DB 트리거 guard_expense_write 와 같은 기준).
+const LOCKED_STATUSES = ["approved", "scheduled", "paid"];
 import { logInfo } from "@/lib/logger";
 import { calcWithholding } from "@/lib/expenses/tax";
 import type { VendorTaxCategory } from "@/lib/types";
@@ -49,7 +53,7 @@ const SELECT_COLUMNS =
 
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
-    const isValid = await validateApiKey(request);
+    const isValid = await validateApiKeyRecord(request);
     if (!isValid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -80,12 +84,18 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
-    const isValid = await validateApiKey(request);
-    if (!isValid) {
+    const apiKey = await validateApiKeyRecord(request);
+    if (!apiKey) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { id } = await context.params;
+    if (!apiKey.employee.isAdmin && !apiKey.employee.is_finance) {
+      const { data: current } = await createAdminClient().from("expenses").select("status").eq("id", id).maybeSingle();
+      if (current && LOCKED_STATUSES.includes(current.status as string)) {
+        return forbiddenResponse("승인·지급된 매입은 관리자 또는 재무 담당만 고치거나 지울 수 있습니다.");
+      }
+    }
     const body = await request.json();
     const supabase = createAdminClient();
 
@@ -343,12 +353,18 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
-    const isValid = await validateApiKey(request);
-    if (!isValid) {
+    const apiKey = await validateApiKeyRecord(request);
+    if (!apiKey) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { id } = await context.params;
+    if (!apiKey.employee.isAdmin && !apiKey.employee.is_finance) {
+      const { data: current } = await createAdminClient().from("expenses").select("status").eq("id", id).maybeSingle();
+      if (current && LOCKED_STATUSES.includes(current.status as string)) {
+        return forbiddenResponse("승인·지급된 매입은 관리자 또는 재무 담당만 고치거나 지울 수 있습니다.");
+      }
+    }
     const supabase = createAdminClient();
 
     const { data: existing } = await supabase

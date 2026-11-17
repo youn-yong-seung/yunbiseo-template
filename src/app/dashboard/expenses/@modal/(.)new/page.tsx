@@ -8,6 +8,7 @@ import { ExpenseFormBody, type VendorOption } from "@/components/expenses/expens
 import { ExpenseModalShell } from "@/components/expenses/expense-modal-shell";
 import { sendLog } from "@/lib/log-client";
 import { createClient } from "@/lib/supabase/client";
+import { useCanSettleExpenses } from "@/lib/expenses/use-can-settle";
 import type { ExpenseInsert, ExpenseType, Project } from "@/lib/types";
 
 function NewExpenseModalContent() {
@@ -47,10 +48,13 @@ function NewExpenseModalContent() {
     };
   }, [supabase]);
 
+  // 지급완료 상태는 관리자·재무만 쓸 수 있다(직원은 작성중으로 저장 후 요청).
+  const canSettle = useCanSettleExpenses();
+
   const handleSave = async (data: ExpenseInsert) => {
     const { data: inserted, error } = await supabase
       .from("expenses")
-      .insert({ ...data, status: data.payment_date ? "paid" : "draft" })
+      .insert({ ...data, status: canSettle && data.payment_date ? "paid" : "draft" })
       .select("id")
       .single();
     if (error) {
@@ -70,7 +74,7 @@ function NewExpenseModalContent() {
   const handleSaveAndContinue = async (data: ExpenseInsert) => {
     const { data: inserted, error } = await supabase
       .from("expenses")
-      .insert({ ...data, status: data.payment_date ? "paid" : "draft" })
+      .insert({ ...data, status: canSettle && data.payment_date ? "paid" : "draft" })
       .select("id")
       .single();
     if (error) {

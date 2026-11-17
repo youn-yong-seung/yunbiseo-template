@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useCanSettleExpenses } from "@/lib/expenses/use-can-settle";
 import { sendLog } from "@/lib/log-client";
 import { Button } from "@/components/ui/button";
 import {
@@ -61,12 +62,17 @@ export default function EditExpensePage() {
     void fetchData();
   }, [fetchData]);
 
+  // 지급완료 상태는 관리자·재무만 쓸 수 있다(직원은 작성중으로 저장 후 요청).
+  const canSettle = useCanSettleExpenses();
+
   const handleSave = async (data: ExpenseInsert) => {
-    const nextStatus = data.payment_date
-      ? "paid"
-      : expense?.status === "paid"
-        ? "draft"
-        : expense?.status;
+    const nextStatus = !canSettle
+      ? expense?.status
+      : data.payment_date
+        ? "paid"
+        : expense?.status === "paid"
+          ? "draft"
+          : expense?.status;
     const { error } = await supabase
       .from("expenses")
       .update({ ...data, ...(nextStatus ? { status: nextStatus } : {}) })
