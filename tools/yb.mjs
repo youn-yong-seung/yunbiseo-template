@@ -43,6 +43,8 @@ const STUDENT_COMMANDS = {
   revenue: ["list", "get", "create", "update", "tax-invoice"],
   card: ["list", "get", "create", "update", "delete"],
   meeting: ["create"],
+  today: true,
+  schedule: ["list", "get", "create", "update", "delete"],
 };
 
 function studentAllows(command, sub) {
@@ -74,6 +76,11 @@ function saveConfig(config) {
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n", {
     mode: 0o600,
   });
+  try {
+    fs.chmodSync(CONFIG_PATH, 0o600); // 이미 있던 파일도 나만 읽게
+  } catch {
+    // 윈도우 등 권한 개념이 다른 곳은 무시
+  }
 }
 
 // ---------------------------------------------------------------- args
@@ -210,6 +217,7 @@ async function request(method, apiPath, { query, body, form, soft = false } = {}
   try {
     res = await fetch(url, init);
   } catch (error) {
+    if (soft) return null;
     fail(`요청 실패: ${error.message} (${url})`);
   }
 
@@ -299,7 +307,15 @@ function promptStdin(question) {
 }
 
 // 루프백 서버를 띄우고 브라우저를 열어 1회용 코드를 받는다(one-shot, 300초 타임아웃, state 검증).
-async function loginBrowser(base, state) {
+// PKCE(S256): 브라우저로 넘기는 건 challenge 뿐이고, 코드를 키로 바꿀 때 verifier 를 같이 보낸다.
+// 코드가 브라우저 기록 등으로 새어도 이 터미널이 가진 verifier 없이는 키로 바꿀 수 없다.
+function createPkce() {
+  const verifier = crypto.randomBytes(32).toString("base64url");
+  const challenge = crypto.createHash("sha256").update(verifier).digest("base64url");
+  return { verifier, challenge };
+}
+
+async function loginBrowser(base, state, challenge) {
   const server = http.createServer();
   let settle;
   const codePromise = new Promise((resolve, reject) => {
@@ -347,7 +363,7 @@ async function loginBrowser(base, state) {
     server.listen(0, "127.0.0.1", resolve);
   });
   const { port } = server.address();
-  const authUrl = `${base}/cli-auth?port=${port}&state=${state}`;
+  const authUrl = `${base}/cli-auth?port=${port}&state=${state}&challenge=${challenge}`;
   process.stdout.write(`브라우저에서 윤비서 로그인 후 인증을 완료하세요. 창이 열리지 않으면 아래 주소를 직접 여세요:\n\n  ${authUrl}\n\n`);
   openBrowser(authUrl);
 
@@ -360,13 +376,13 @@ async function loginBrowser(base, state) {
 }
 
 // 1회용 코드를 API 키로 교환하고 저장한다. request() 대신 순수 fetch 사용(키가 아직 없음).
-async function exchangeCode(base, code, flags, config) {
+async function exchangeCode(base, code, flags, config, verifier) {
   let res;
   try {
     res = await fetch(`${base}/api/cli-auth/exchange`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ code, hostname: os.hostname() }),
+      body: JSON.stringify({ code, hostname: os.hostname(), code_verifier: verifier }),
     });
   } catch (error) {
     fail(`코드 교환 요청 실패: ${error.message}`);
@@ -383,11 +399,13 @@ async function exchangeCode(base, code, flags, config) {
     if (parsed) process.stderr.write(JSON.stringify(parsed, null, 2) + "\n");
     process.exit(1);
   }
-  const { raw_key, name, created_by, key_prefix } = parsed || {};
+  const { raw_key, name, created_by, key_prefix, employee_id } = parsed || {};
   if (!raw_key) fail("서버 응답에 raw_key 가 없습니다.");
   config.api_key = raw_key;
   // 직원명을 캐시해 whoami/auth status 가 브라우저 재로그인 없이 답하게 한다.
   if (created_by) config.employee = String(created_by);
+  if (employee_id) config.employee_id = String(employee_id);
+  else delete config.employee_id;
   if (flags.url) config.base_url = String(flags.url);
   saveConfig(config);
   const masked = (key_prefix ? String(key_prefix) : String(raw_key)).slice(0, 8) + "…";
@@ -405,19 +423,20 @@ async function login(flags) {
   const config = loadConfig();
   const base = requireBase(flags.url ? String(flags.url) : config.base_url || DEFAULT_URL);
 
+  const pkce = createPkce();
   if (flags.manual) {
-    const url = `${base}/cli-auth`;
+    const url = `${base}/cli-auth?challenge=${pkce.challenge}`;
     process.stdout.write(`브라우저에서 다음 주소를 열고 윤비서 로그인 후 발급되는 코드를 복사하세요:\n\n  ${url}\n\n`);
     openBrowser(url);
     const code = (await promptStdin("코드 붙여넣기: ")).trim();
     if (!code) fail("코드가 비어 있습니다.");
-    await exchangeCode(base, code, flags, config);
+    await exchangeCode(base, code, flags, config, pkce.verifier);
     return;
   }
 
   const state = crypto.randomBytes(16).toString("hex");
-  const code = await loginBrowser(base, state);
-  await exchangeCode(base, code, flags, config);
+  const code = await loginBrowser(base, state, pkce.challenge);
+  await exchangeCode(base, code, flags, config, pkce.verifier);
 }
 
 function checkForUpdate() {}
@@ -578,7 +597,11 @@ const SCHEDULE_CREATE_FIELDS = {
 
 const SCHEDULE_UPDATE_FIELDS = {
   title: "title",
+  description: "description",
   date: "date",
+  time: "time",
+  "duration-min": "duration_min",
+  "all-day": "all_day",
   start: "start_at",
   end: "end_at",
   category: "category",
@@ -919,9 +942,9 @@ const STUDENT_HELP = `yb — 윤비서 CLI (수강생판, AI 에이전트 친화
 처음 한 번
   yb login --url https://내-윤비서-주소      브라우저에서 내 윤비서에 로그인하면 API 키가 발급·저장된다
   yb login --manual                         브라우저가 자동으로 안 열릴 때: 코드를 복사해 붙여넣는다
-  yb whoami                                 로그인한 내 이름 확인 (AI 에이전트는 yb login 대신 이걸 쓴다)
+  yb auth --key <API키> --url <주소>          마이페이지 → 내 API 키에서 만든 키로 연결(연결되는지 바로 확인한다)
+  yb whoami                                 이 키의 주인(나) 확인 — 서버에 물어본다. AI 에이전트는 yb login 대신 이걸 쓴다
   yb auth status                            저장된 주소·키(앞 8자) 확인
-  yb auth --key <API키> --url <주소>          웹 시스템 설정에서 만든 키를 직접 저장
   설정 파일: ~/.config/yunbiseo-template/config.json
 
 지금 쓸 수 있는 명령 (출력은 모두 JSON)
@@ -932,6 +955,17 @@ const STUDENT_HELP = `yb — 윤비서 CLI (수강생판, AI 에이전트 친화
       create --date YYYY-MM-DD --amount 금액 --depositor 입금자 [--bank] [--account]
   yb meeting create --transcript 전사록 [--title 제목]
   yb api GET|POST|PATCH|DELETE /api/경로 [--q '{"key":"value"}'] [--json '{...}']
+
+오늘·일정 (날짜는 YYYY-MM-DD 또는 오늘|내일|모레|금|다음주 화|11-25, 시각은 HH:MM, 모두 한국 시간)
+  yb today                                  내 열린 할 일(기한별) + 오늘 내 일정
+  yb schedule list [--from 날짜] [--to 날짜] [--assignee me|이름] [--q 검색어] [--category] [--limit N]
+  yb schedule get <일정id>
+  yb schedule create --title 제목 --date "다음주 화" --time 14:00 [--duration-min 60] [--location 장소]
+                     [--category meeting|education|content|sales|personal|other] [--assignees 이름,이름] [--description]
+      · 띄어쓴 날짜는 따옴표로 감싼다. 종일 일정: --date 11-25 --all-day true. 담당자를 안 주면 나(만든 사람)가 담당자
+      · meeting 유형이고 구글 캘린더가 연결돼 있으면 웹 화면처럼 캘린더·미트 링크도 만든다(연결 없으면 윤비서에만 저장)
+  yb schedule update <일정id> [--title] [--date] [--time] [--duration-min] [--location] [--category] [--assignees]
+  yb schedule delete <일정id>                만든 사람·참석자·관리자만 고치고 지울 수 있다
 
 고객
   yb customer list [--q 검색어] [--type 개인|개인사업자|법인] [--limit N]
@@ -1073,6 +1107,26 @@ function myName() {
   return name;
 }
 
+// 서버에 "이 API 키 주인이 누구냐"를 묻는다(GET /api/me). 수강생 템플릿 서버에는 있고,
+// 없는 서버(404)거나 실패하면 null. 성공하면 직원명·id 를 설정에 캐시한다.
+async function fetchMe() {
+  const res = await request("GET", "/api/me", { soft: true });
+  const employee = res?.employee;
+  if (!employee?.name) return null;
+  const config = loadConfig();
+  config.employee = String(employee.name);
+  if (employee.id) config.employee_id = String(employee.id);
+  saveConfig(config);
+  return res;
+}
+
+// 직원명이 필요한 명령(today·given 등)용: 캐시가 없으면 서버에 한 번 물어 채운다.
+async function ensureMyName() {
+  if (loadConfig().employee) return loadConfig().employee;
+  await fetchMe();
+  return myName();
+}
+
 function assigneeNames(task) {
   return (task.assignees ?? []).map((a) => a.employees?.name).filter(Boolean);
 }
@@ -1149,17 +1203,26 @@ async function cmdFollowup(flags) {
 
 async function cmdToday(flags) {
   const who = flags.who ? String(flags.who) : "me";
-  const name = who === "me" ? myName() : who;
+  const name = who === "me" ? await ensureMyName() : who;
+  const myId = who === "me" ? loadConfig().employee_id : null;
   const today = kstToday();
   const [mine, given, schedules] = await Promise.all([
     fetchTasks({ assignee: who, status: OPEN_TASK_STATUSES }),
     fetchTasks({ requester: who, status: OPEN_TASK_STATUSES, due_before: addDays(today, -1) }),
     request("GET", "/api/schedules", {
-      query: { from: `${today}T00:00:00+09:00`, to: `${today}T23:59:59+09:00`, limit: 100 },
+      query: {
+        from: `${today}T00:00:00+09:00`,
+        to: `${today}T23:59:59+09:00`,
+        limit: 100,
+        ...(IS_STUDENT ? { assignee: who } : {}),
+      },
     }),
   ]);
-  const myEvents = (schedules?.data ?? []).filter((event) =>
-    (event.attendees ?? []).some((a) => a.employees?.name === name),
+  // 내 일정 = 내가 참석자(담당자)이거나 내가 만든 일정
+  const myEvents = (schedules?.data ?? []).filter(
+    (event) =>
+      (event.attendees ?? []).some((a) => a.employees?.name === name) ||
+      (myId && event.created_by === myId),
   );
   const givenLate = given.filter((task) => assigneeNames(task).some((n) => n !== name));
 
@@ -1193,7 +1256,9 @@ async function cmdToday(flags) {
     out.push("");
   }
   if (givenLate.length) out.push(`내가 맡긴 일 중 기한 지남 ${givenLate.length}건 → yb given`);
-  const sales = await fetchSalesFollowups(who, 7, { soft: true }).catch(() => []);
+  if (IS_STUDENT && !myEvents.length) out.push("오늘 일정이 없습니다.");
+  // 영업 후속 확인은 사내 윤비서에만 있다.
+  const sales = IS_STUDENT ? [] : await fetchSalesFollowups(who, 7, { soft: true }).catch(() => []);
   const quietSales = sales.filter((p) => !p.has_next_step);
   if (quietSales.length) out.push(`영업 중 프로젝트 ${quietSales.length}건이 7일 넘게 조용 → yb followup`);
   process.stdout.write(out.join("\n").trimEnd() + "\n");
@@ -1308,7 +1373,7 @@ async function cmdGive(positional, flags) {
 }
 
 async function cmdGiven(flags) {
-  const name = myName();
+  const name = await ensureMyName();
   const today = kstToday();
   const [open, done] = await Promise.all([
     fetchTasks({ requester: "me", status: `${OPEN_TASK_STATUSES},백로그` }),
@@ -1421,9 +1486,34 @@ async function main() {
 
     case "whoami": {
       const config = loadConfig();
+      // 수강생판: API 키 주인을 서버에 물어 답한다(설정 화면에서 만든 키를 yb auth 로 넣어도 바로 "나"가 잡힌다).
+      // 사내판: 캐시가 있으면 그대로, 없을 때만 서버에 묻는다.
+      if ((IS_STUDENT || !config.employee) && (process.env.YB_API_KEY || config.api_key)) {
+        const me = await fetchMe();
+        if (me) {
+          printJson({
+            employee: me.employee.name,
+            employee_id: me.employee.id ?? null,
+            is_admin: Boolean(me.employee.is_admin),
+            via: me.via ?? null,
+            source: "server",
+          });
+          return;
+        }
+      }
       if (config.employee) {
         printJson({ employee: config.employee, source: "config" });
         return;
+      }
+      if (IS_STUDENT) {
+        printJson({
+          employee: null,
+          error: config.api_key ? "invalid_api_key" : "not_logged_in",
+          hint: config.api_key
+            ? "저장된 API 키로 윤비서에 연결하지 못했습니다. 주소(yb auth status)와 키를 확인하고, 키가 지워졌으면 마이페이지 → 내 API 키에서 새로 만들어 `yb auth --key <키> --url <주소>` 로 다시 넣으세요."
+            : "아직 연결 전입니다. 마이페이지 → 내 API 키에서 키를 만든 뒤 `yb auth --key <키> --url <윤비서 주소>` 를 실행하세요.",
+        });
+        process.exit(1);
       }
       // 자동으로 yb login 을 실행하지 않는다 — 브라우저 팝업이 뜨므로 사용자 본인이 1회 실행해야 한다.
       printJson({
@@ -1448,12 +1538,28 @@ async function main() {
       }
       if (!flags.key) fail("사용법: yb auth --key <API키> [--url <베이스URL>]");
       const config = loadConfig();
-      config.api_key = String(flags.key);
+      const previous = { ...config };
+      config.api_key = String(flags.key).trim();
       // 수동 키 등록은 소유자를 검증하지 않으므로 이전 로그인의 직원명 캐시를 지운다.
       delete config.employee;
-      if (flags.url) config.base_url = String(flags.url);
+      delete config.employee_id;
+      if (flags.url) config.base_url = String(flags.url).replace(/\/$/, "");
       saveConfig(config);
-      printJson({ saved: CONFIG_PATH, base_url: config.base_url || DEFAULT_URL || null });
+      // 새 키가 누구 것인지 서버에 확인해 캐시한다(사내 서버처럼 확인 API 가 없으면 건너뛴다).
+      const me = await fetchMe();
+      if (IS_STUDENT && !me) {
+        saveConfig(previous);
+        fail(
+          "이 키로 윤비서에 연결하지 못했습니다. 주소(--url)와 키를 다시 확인하세요. 저장하지 않았습니다.\n" +
+            "  · 주소 예: http://localhost:3000 또는 https://내-윤비서.vercel.app\n" +
+            "  · 키는 윤비서 마이페이지 → 내 API 키에서 만든 ys_ 로 시작하는 값"
+        );
+      }
+      printJson({
+        saved: CONFIG_PATH,
+        base_url: config.base_url || DEFAULT_URL || null,
+        employee: me?.employee?.name ?? null,
+      });
       return;
     }
 
@@ -1669,6 +1775,10 @@ async function main() {
     case "schedule": {
       const id = positional[1];
       if (sub === "list") {
+        for (const key of ["from", "to"]) {
+          const value = flags[key];
+          if (value !== undefined && !/^\d{4}-\d{2}-\d{2}/.test(String(value))) flags[key] = parseDue(value);
+        }
         printJson(await request("GET", "/api/schedules", { query: listQuery(flags) }));
       } else if (sub === "get") {
         if (!id) fail("사용법: yb schedule get <일정id>");
@@ -1678,6 +1788,8 @@ async function main() {
         printJson(await request("DELETE", "/api/schedules", { query: { id } }));
       } else if (sub === "create") {
         if (!flags.json && !flags.title) fail("--title 이 필요합니다");
+        // --date 에 "내일", "다음주 화", "11-25" 같은 말을 줘도 YYYY-MM-DD 로 바꿔 보낸다.
+        if (flags.date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(String(flags.date))) flags.date = parseDue(flags.date);
         const body = buildBody(flags, SCHEDULE_CREATE_FIELDS);
         const attendeeIds = parseCsv(flags["attendee-ids"]);
         if (attendeeIds.length > 0) body.attendee_ids = attendeeIds;
@@ -1688,6 +1800,7 @@ async function main() {
           return;
         }
         if (!id) fail("사용법: yb schedule update <id> [필드]");
+        if (flags.date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(String(flags.date))) flags.date = parseDue(flags.date);
         printJson(await request("PATCH", `/api/schedules/${id}`, { body: buildBody(flags, SCHEDULE_UPDATE_FIELDS) }));
       } else fail("사용법: yb schedule list|get|create|update|delete");
       return;

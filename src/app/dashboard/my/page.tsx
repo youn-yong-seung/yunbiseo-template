@@ -35,6 +35,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useMasking } from "@/components/masking-provider";
+import { MyApiKeys } from "@/components/my-api-keys";
 import { clearClientSession, createClient } from "@/lib/supabase/client";
 import { sendLog } from "@/lib/log-client";
 
@@ -178,8 +179,8 @@ export default function MyPage() {
       return;
     }
 
-    if (newPassword.length < 6) {
-      toast.error("새 비밀번호는 6자 이상이어야 합니다.");
+    if (newPassword.length < 8) {
+      toast.error("새 비밀번호는 8자 이상이어야 합니다.");
       return;
     }
 
@@ -407,6 +408,8 @@ export default function MyPage() {
         </SectionCard>
       </section>
 
+      <MyApiKeys />
+
       <Dialog open={pwDialogOpen} onOpenChange={setPwDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -431,7 +434,7 @@ export default function MyPage() {
                   value={newPassword}
                   onChange={(event) => setNewPassword(event.target.value)}
                   required
-                  minLength={6}
+                  minLength={8}
                 />
               </Field>
               <Field label="새 비밀번호 확인" htmlFor="confirm-password">
@@ -441,7 +444,7 @@ export default function MyPage() {
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   required
-                  minLength={6}
+                  minLength={8}
                 />
               </Field>
             </div>

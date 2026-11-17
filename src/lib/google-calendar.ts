@@ -1,6 +1,7 @@
 import { calendar_v3, google } from "googleapis";
 import { getOAuthClient } from "@/lib/gmail";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { toKstDateString } from "@/lib/date";
 
 const API_TIMEOUT_MS = 30_000;
 
@@ -84,8 +85,9 @@ type LocalScheduleForGoogle = {
   location?: string | null;
 };
 
+// 종일 일정 날짜는 한국 시간 기준 날짜로 보낸다(UTC 로 자르면 자정 일정이 하루 앞당겨진다).
 function formatGoogleAllDayDate(isoString: string) {
-  return new Date(isoString).toISOString().slice(0, 10);
+  return toKstDateString(new Date(isoString));
 }
 
 function addDaysToDateString(dateString: string, days: number) {
