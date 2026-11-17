@@ -172,6 +172,21 @@ supabase db push
 > ✅ 성공하면 Supabase 대시보드의 **Table Editor** 에 `employees`, `customers`, `projects` 등
 > 30개 테이블이 생깁니다. (이 스키마는 신규 프로젝트에서 0 에러로 적용되는 것을 검증했습니다.)
 
+### 3-2. 보안 설정 두 가지 (대시보드에서 1분) 🔐
+
+윤비서는 회원가입 화면을 쓰지 않습니다(직원은 관리자가 [직원관리]에서 만듭니다). Supabase 쪽 문도 닫아 둡니다.
+https://supabase.com/dashboard 에서 내 프로젝트를 연 뒤:
+
+1. **회원가입 끄기** — 왼쪽 **Authentication → Sign In / Providers** → **"Allow new users to sign up"** 을 끄고 **Save**.
+2. **로그인 확인 훅 켜기** — 왼쪽 **Authentication → Hooks** → **Add hook** → **Customize Access Token (JWT) Claims** →
+   Hook type **Postgres**, Schema **public**, Function **custom_access_token_hook** 선택 → **Create hook**.
+   - 직원으로 등록되지 않은(또는 비활성) 계정은 로그인 토큰을 받지 못합니다.
+   - 비밀번호를 5번 틀려 잠긴 계정은 Supabase 로 직접 로그인하는 길도 15분 동안 막힙니다.
+
+> 이 두 가지를 안 해도 윤비서 화면·API·DB 정책이 직원 아닌 계정을 막지만, 한 겹 더 막는 장치입니다.
+> **알아 둘 한계:** Supabase 로그인 주소로 직접 비밀번호를 틀리는 시도는 윤비서의 "5회 실패" 횟수에 잡히지 않습니다.
+> 대신 Supabase 가 같은 IP 의 로그인 시도를 5분에 30번 정도로 제한합니다. 관리자 비밀번호는 길게(10자 이상) 쓰세요.
+
 ---
 
 ## 4. 첫 관리자 계정 만들기 ⭐ (로그인하려면 꼭 필요)
@@ -319,7 +334,8 @@ vercel --prod
 npm link
 
 # 2-가) API 키로 연결 — 윤비서 로그인 → 왼쪽 아래 '내 이름' → 마이페이지 → '내 API 키' → [새 API 키 만들기]
-yb auth --key ys_... --url http://localhost:3000   # 배포했다면 https://<프로젝트명>.vercel.app
+yb auth --url http://localhost:3000   # 배포했다면 https://<프로젝트명>.vercel.app
+# → "API 키를 붙여넣고 Enter" 가 나오면 붙여넣습니다(화면에 안 보이고 셸 기록에도 남지 않습니다)
 
 # 2-나) 또는 브라우저로 연결 (처음 한 번, 브라우저가 열립니다)
 yb login --url http://localhost:3000
@@ -329,7 +345,10 @@ yb whoami
 yb today
 ```
 
-- `yb auth --key` 는 저장하기 전에 서버에 "이 키 주인이 누구인지" 물어봐서, 틀린 키·주소는 저장하지 않습니다.
+- `yb auth` 는 저장하기 전에 서버에 "이 키 주인이 누구인지" 물어봐서, 틀린 키·주소는 저장하지 않습니다.
+  키를 명령줄에 `--key ys_...` 로 직접 쓰면 셸 기록에 남으니 쓰지 마세요. 자동화할 때는 `printf '%s' "$키" | yb auth --url <주소>`.
+- API 키 값은 만들 때 한 번만 보입니다(서버에는 되살릴 수 없는 해시만 저장). 잃어버리면 지우고 새로 만드세요.
+- 배포 주소는 `https://` 로 씁니다. `http://` 원격 주소면 yb 가 경고합니다(키가 암호화되지 않고 오갑니다).
 - 브라우저 연결은 윤비서 로그인 → **"이 컴퓨터에서 yb CLI 인증"** 을 누르면 키가 자동으로 발급·저장됩니다
   (`~/.config/yunbiseo-template/config.json`, 나만 읽을 수 있는 권한). 마이페이지 키 목록에 `yb-cli <컴퓨터 이름>` 으로 보입니다.
 - 브라우저가 자동으로 안 돌아오면 `yb login --url <주소> --manual` 로 코드를 복사해 붙여넣습니다.
@@ -353,7 +372,8 @@ supabase db push            # 새 테이블 만들기 — 'Do you want to push..
 
 > **2026-11 보안 업데이트를 받은 뒤에는**: 회사 데이터는 "직원으로 등록된 활성 계정"만 볼 수 있고, API 키는 만든 직원 이름으로 동작합니다.
 > 업데이트 전에 만든 키 중 주인을 알 수 없는 키(만든 사람 이름이 직원 이름과 다르거나 같은 이름이 둘 이상)는 막힙니다.
-> `yb whoami` 가 실패하면 마이페이지 → 내 API 키에서 새로 만들어 `yb auth --key` 로 다시 넣으세요.
+> `yb whoami` 가 실패하면 마이페이지 → 내 API 키에서 새로 만들어 `yb auth --url <주소>` 로 다시 넣으세요.
+> 업데이트 뒤에는 3-2 의 보안 설정 두 가지도 해 두세요. 예전에 만든 키를 "다시 보기"하던 기능은 없어졌습니다(키 값은 만들 때 한 번만 보입니다).
 
 ---
 
@@ -415,7 +435,7 @@ supabase db push            # 새 테이블 만들기 — 'Do you want to push..
   `supabase link --project-ref ...` 를 다시 확인하세요. 새 프로젝트면 준비(1~2분)를 기다린 뒤 재시도.
 - **로그인이 안 됨** → ① 이메일이 아니라 **ID `admin`** 과 `setup:admin` 이 보여 준 비밀번호로 시도했는지 확인,
   ② `npm run setup:admin` 을 다시 실행해 새 비밀번호를 받은 뒤 다시 시도.
-  ③ "5번 틀려 15분 동안 로그인할 수 없습니다" 가 나오면 15분 뒤 다시 하거나 ②로 비밀번호를 새로 받습니다.
+  ③ 맞는 비밀번호인데도 안 되면 5번 틀려 15분 동안 잠긴 것일 수 있습니다(보안상 문구는 같습니다). 15분 뒤 다시 하거나 ②로 비밀번호를 새로 받습니다.
 - **비밀번호가 너무 짧다는 오류** → `setup:admin` 에 직접 줄 때는 **10자 이상**, 마이페이지에서 바꿀 때는 **8자 이상**이어야 합니다.
 - **`npm run build`/실행 실패** → `.env.local` 에 Supabase 값(URL/anon/service_role)이 채워졌는지 확인.
 

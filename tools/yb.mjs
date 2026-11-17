@@ -199,7 +199,13 @@ async function request(method, apiPath, { query, body, form, soft = false } = {}
   }
   // YB_BASE_URL/YB_API_KEY 환경변수로 대상 서버를 임시 오버라이드할 수 있다 (로컬 개발 서버 검증용)
   const base = requireBase(process.env.YB_BASE_URL || config.base_url || DEFAULT_URL);
-  const url = new URL(base + apiPath);
+  // 키가 설정한 윤비서 주소 밖으로 나가지 않게 한다("@다른호스트", "//다른호스트", 절대 주소 등).
+  const baseUrl = new URL(base);
+  if (typeof apiPath !== "string" || !apiPath.startsWith("/") || apiPath.startsWith("//") || apiPath.includes("\\")) {
+    fail(`API 경로는 /api/... 처럼 / 로 시작해야 합니다: ${apiPath}`);
+  }
+  const url = new URL(apiPath, baseUrl);
+  if (url.origin !== baseUrl.origin) fail(`설정된 윤비서 주소(${baseUrl.origin}) 밖으로는 요청하지 않습니다: ${url.origin}`);
   for (const [k, v] of Object.entries(query || {})) {
     if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
   }
@@ -294,6 +300,57 @@ function authResultPage(title, message) {
     `p{color:#94a3b8;margin:0}</style></head><body><div class="card">` +
     `<h1>${title}</h1><p>${message}</p></div></body></html>`
   );
+}
+
+// 화면에 글자를 보이지 않고 한 줄 입력받는다(API 키처럼 남이 보면 안 되는 값). 터미널이 아니면 표준입력 전체를 읽는다.
+function promptSecret(question) {
+  if (!process.stdin.isTTY) {
+    return new Promise((resolve) => {
+      let data = "";
+      process.stdin.setEncoding("utf8");
+      process.stdin.on("data", (chunk) => (data += chunk));
+      process.stdin.on("end", () => resolve(data.trim()));
+    });
+  }
+  return new Promise((resolve) => {
+    process.stdout.write(question);
+    const stdin = process.stdin;
+    stdin.setRawMode(true);
+    stdin.resume();
+    stdin.setEncoding("utf8");
+    let value = "";
+    const onData = (ch) => {
+      if (ch === "\r" || ch === "\n" || ch === "\u0004") {
+        stdin.setRawMode(false);
+        stdin.pause();
+        stdin.removeListener("data", onData);
+        process.stdout.write("\n");
+        resolve(value.trim());
+      } else if (ch === "\u0003") {
+        stdin.setRawMode(false);
+        process.stdout.write("\n");
+        process.exit(130);
+      } else if (ch === "\u007f" || ch === "\b") {
+        value = value.slice(0, -1);
+      } else {
+        value += ch;
+      }
+    };
+    stdin.on("data", onData);
+  });
+}
+
+// http:// 주소는 키가 암호화되지 않고 오간다. 내 컴퓨터(localhost)가 아니면 경고한다.
+function warnIfInsecure(base) {
+  try {
+    const url = new URL(base);
+    const local = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
+    if (url.protocol === "http:" && !local) {
+      process.stderr.write(`yb: 경고 — ${url.origin} 은 https 가 아니라서 API 키가 암호화되지 않고 전송됩니다. 배포 주소는 https:// 로 쓰세요.\n`);
+    }
+  } catch {
+    fail(`윤비서 주소가 올바르지 않습니다: ${base}`);
+  }
 }
 
 function promptStdin(question) {
@@ -422,6 +479,7 @@ async function exchangeCode(base, code, flags, config, verifier) {
 async function login(flags) {
   const config = loadConfig();
   const base = requireBase(flags.url ? String(flags.url) : config.base_url || DEFAULT_URL);
+  warnIfInsecure(base);
 
   const pkce = createPkce();
   if (flags.manual) {
@@ -942,7 +1000,8 @@ const STUDENT_HELP = `yb — 윤비서 CLI (수강생판, AI 에이전트 친화
 처음 한 번
   yb login --url https://내-윤비서-주소      브라우저에서 내 윤비서에 로그인하면 API 키가 발급·저장된다
   yb login --manual                         브라우저가 자동으로 안 열릴 때: 코드를 복사해 붙여넣는다
-  yb auth --key <API키> --url <주소>          마이페이지 → 내 API 키에서 만든 키로 연결(연결되는지 바로 확인한다)
+  yb auth --url <주소>                       마이페이지 → 내 API 키에서 만든 키로 연결. 실행하면 키를 화면에 안 보이게 붙여넣는다
+                                            (키를 명령줄에 쓰면 셸 기록에 남는다. 파이프도 된다: printf '%s' "$키" | yb auth --url <주소>)
   yb whoami                                 이 키의 주인(나) 확인 — 서버에 물어본다. AI 에이전트는 yb login 대신 이걸 쓴다
   yb auth status                            저장된 주소·키(앞 8자) 확인
   설정 파일: ~/.config/yunbiseo-template/config.json
@@ -1536,10 +1595,15 @@ async function main() {
         });
         return;
       }
-      if (!flags.key) fail("사용법: yb auth --key <API키> [--url <베이스URL>]");
+      // 키는 명령줄에 쓰지 않는 것을 권장한다(셸 기록에 남는다). --key 를 빼거나 --key - 로 주면
+      // 터미널에서는 화면에 안 보이게 입력받고, 파이프로 넘기면(printf ... | yb auth --url ...) 표준입력에서 읽는다.
+      let keyValue = flags.key === undefined || flags.key === true || flags.key === "-" ? "" : String(flags.key);
+      if (!keyValue) keyValue = await promptSecret("API 키를 붙여넣고 Enter (화면에 보이지 않습니다): ");
+      if (!keyValue) fail("사용법: yb auth --url <윤비서 주소>  (실행 후 API 키를 붙여넣기)  또는  printf '%s' \"$키\" | yb auth --url <주소>");
+      if (flags.url) warnIfInsecure(String(flags.url));
       const config = loadConfig();
       const previous = { ...config };
-      config.api_key = String(flags.key).trim();
+      config.api_key = keyValue.trim();
       // 수동 키 등록은 소유자를 검증하지 않으므로 이전 로그인의 직원명 캐시를 지운다.
       delete config.employee;
       delete config.employee_id;
@@ -1567,6 +1631,8 @@ async function main() {
       const method = (positional[0] || "").toUpperCase();
       const apiPath = positional[1];
       if (!method || !apiPath) fail("사용법: yb api <GET|POST|PATCH|DELETE> </api/...> [--json '...'] [--q '{...}']");
+      if (!["GET", "POST", "PATCH", "PUT", "DELETE"].includes(method)) fail(`지원하지 않는 메서드: ${method}`);
+      if (!String(apiPath).startsWith("/api/")) fail("yb api 경로는 /api/ 로 시작해야 합니다(다른 주소로 키를 보내지 않습니다).");
       let query;
       if (flags.q) {
         try { query = JSON.parse(String(flags.q)); } catch (e) { fail(`--q 파싱 실패: ${e.message}`); }
