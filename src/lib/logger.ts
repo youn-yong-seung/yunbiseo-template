@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { clientIp } from "@/lib/client-ip";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 interface LogOptions {
@@ -14,10 +15,7 @@ async function getIp(): Promise<string | null> {
     const h = await headers();
     // x-forwarded-for 의 첫 값은 요청한 쪽이 마음대로 넣을 수 있다. 배포 플랫폼이 직접 붙이는 값을 먼저 쓴다.
     // Vercel: x-vercel-forwarded-for / x-real-ip. 그 밖에는 x-forwarded-for 의 마지막 값(가장 가까운 프록시가 붙인 값).
-    const platform = h.get("x-vercel-forwarded-for") ?? h.get("x-real-ip");
-    if (platform) return platform.split(",")[0]?.trim().slice(0, 64) || null;
-    const chain = h.get("x-forwarded-for")?.split(",").map((v) => v.trim()).filter(Boolean) ?? [];
-    return chain.length ? chain[chain.length - 1].slice(0, 64) : null;
+    return clientIp(h);
   } catch {
     return null;
   }

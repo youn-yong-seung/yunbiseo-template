@@ -25,11 +25,10 @@ type BoltaWebhookPayload = {
   };
 };
 
+// 비밀은 헤더(x-bolta-webhook-secret)로만 받는다. 주소(?secret=)에 실린 값은 서버 로그·프록시 기록에 남아 받지 않는다.
 function getWebhookSecret(request: NextRequest) {
-  return (
-    request.nextUrl.searchParams.get("secret") ??
-    request.headers.get("x-bolta-webhook-secret")
-  );
+  if (request.nextUrl.searchParams.has("secret")) return null;
+  return request.headers.get("x-bolta-webhook-secret");
 }
 
 export async function POST(request: NextRequest) {

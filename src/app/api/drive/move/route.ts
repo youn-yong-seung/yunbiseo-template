@@ -21,7 +21,9 @@ export async function POST(request: NextRequest) {
     if (!Array.isArray(fileIds) || fileIds.length > 100) {
       return NextResponse.json({ error: "fileIds 는 100개 이하 배열이어야 합니다" }, { status: 400 });
     }
-    await assertInsideAllowedRoots([...fileIds, fromFolderId, toFolderId]);
+    // 옮길 파일은 최상위 폴더 자체가 아니어야 하고, 출발·도착 폴더는 모두 윤비서 폴더 안이어야 한다.
+    await assertInsideAllowedRoots(fileIds, undefined, undefined, { allowRoot: false });
+    await assertInsideAllowedRoots([fromFolderId, toFolderId]);
     const results = [];
     for (const fileId of fileIds) {
       const result = await moveFile(fileId, fromFolderId, toFolderId);

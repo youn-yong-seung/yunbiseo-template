@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { issueApiKey } from "@/lib/api-key-issue";
+import { CLI_KEY_DAYS } from "@/lib/cli-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
     .eq("code_hash", codeHash)
     .is("consumed_at", null)
     .gt("expires_at", nowIso)
-    .select("employee_id, code_challenge")
+    .select("employee_id, code_challenge, hostname, created_at")
     .maybeSingle();
 
   if (consumeError || !consumed || !consumed.employee_id) return unauthorized();
@@ -55,10 +56,13 @@ export async function POST(request: NextRequest) {
   if (!employee || employee.is_active !== true) return unauthorized();
 
   try {
+    // 키 이름에 기기 이름과 발급일을 남기고, yb login 키는 90일 뒤 만료된다.
+    const issuedOn = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
     const issued = await issueApiKey(admin, {
-      name: `yb-cli ${hostname}`.trim(),
+      name: `yb-cli ${consumed.hostname || hostname} ${issuedOn}`.trim(),
       employeeId: employee.id as string,
       employeeName: employee.name as string,
+      expiresAt: new Date(Date.now() + CLI_KEY_DAYS * 86400_000).toISOString(),
     });
     // 원문 키는 로그로 남기지 않는다.
     return NextResponse.json(
@@ -68,6 +72,7 @@ export async function POST(request: NextRequest) {
         created_by: issued.created_by,
         employee_id: issued.employee_id,
         key_prefix: issued.key_prefix,
+        expires_at: issued.expires_at,
       },
       { headers: { "cache-control": "no-store" } }
     );

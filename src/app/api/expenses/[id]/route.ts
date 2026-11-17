@@ -4,8 +4,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { validateApiKeyRecord } from "@/lib/api-key";
 import { forbiddenResponse } from "@/lib/route-auth";
 
-// 승인·지급 예정·지급완료된 매입은 관리자·재무만 고치거나 지운다(DB 트리거 guard_expense_write 와 같은 기준).
-const LOCKED_STATUSES = ["approved", "scheduled", "paid"];
+// 승인·지급 예정·지급완료·취소된 매입은 관리자·재무만 고치거나 지운다(DB 트리거 guard_expense_write 와 같은 기준).
+// 지급일(payment_date)도 관리자·재무만 넣는다(목록에서 지급완료로 보이는 칸).
+const LOCKED_STATUSES = ["approved", "scheduled", "paid", "cancelled"];
 import { logInfo } from "@/lib/logger";
 import { calcWithholding } from "@/lib/expenses/tax";
 import type { VendorTaxCategory } from "@/lib/types";
@@ -90,13 +91,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     const { id } = await context.params;
+    const body = (await request.json().catch(() => null)) ?? {};
     if (!apiKey.employee.isAdmin && !apiKey.employee.is_finance) {
       const { data: current } = await createAdminClient().from("expenses").select("status").eq("id", id).maybeSingle();
       if (current && LOCKED_STATUSES.includes(current.status as string)) {
-        return forbiddenResponse("승인·지급된 매입은 관리자 또는 재무 담당만 고치거나 지울 수 있습니다.");
+        return forbiddenResponse("승인·지급·취소된 매입은 관리자 또는 재무 담당만 고치거나 지울 수 있습니다.");
+      }
+      if (body.payment_date !== undefined || body.paid_date !== undefined) {
+        return forbiddenResponse("지급일은 관리자 또는 재무 담당만 넣을 수 있습니다.");
       }
     }
-    const body = await request.json();
     const supabase = createAdminClient();
 
     const update: Record<string, unknown> = {};
@@ -362,7 +366,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     if (!apiKey.employee.isAdmin && !apiKey.employee.is_finance) {
       const { data: current } = await createAdminClient().from("expenses").select("status").eq("id", id).maybeSingle();
       if (current && LOCKED_STATUSES.includes(current.status as string)) {
-        return forbiddenResponse("승인·지급된 매입은 관리자 또는 재무 담당만 고치거나 지울 수 있습니다.");
+        return forbiddenResponse("승인·지급·취소된 매입은 관리자 또는 재무 담당만 고치거나 지울 수 있습니다.");
       }
     }
     const supabase = createAdminClient();

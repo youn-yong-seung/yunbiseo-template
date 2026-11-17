@@ -1,5 +1,6 @@
 import { appUrl } from "@/lib/app-url";
-import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
+import { createRouteAuthErrorResponse, forbiddenResponse, requireRouteUser } from "@/lib/route-auth";
+import { Forbidden, assertCanEditTask } from "@/app/api/tasks/_shared";
 import { publicErrorMessage } from "@/lib/safe-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSlackConfigured, sendTaskSlackNotification } from "@/lib/slack";
@@ -9,8 +10,8 @@ function asTrimmed(value: unknown) {
 }
 
 export async function POST(request: Request) {
-  const { user, authUnavailable } = await requireRouteUser();
-  if (!user) {
+  const { user, employee, authUnavailable } = await requireRouteUser();
+  if (!user || !employee) {
     return createRouteAuthErrorResponse(authUnavailable);
   }
 
@@ -18,11 +19,6 @@ export async function POST(request: Request) {
   const taskId = asTrimmed(body?.task_id);
   if (!taskId) {
     return Response.json({ error: "task_id is required" }, { status: 400 });
-  }
-
-  // Slack 미연동이면 조용히 건너뛴다(경고 토스트 방지).
-  if (!(await isSlackConfigured())) {
-    return Response.json({ skipped: true });
   }
 
   try {
@@ -35,6 +31,17 @@ export async function POST(request: Request) {
     if (error) throw new Error(error.message);
     if (!data) {
       return Response.json({ error: "task not found" }, { status: 404 });
+    }
+    try {
+      await assertCanEditTask(admin, taskId, employee);
+    } catch (error) {
+      if (error instanceof Forbidden) return forbiddenResponse(error.message);
+      throw error;
+    }
+
+    // Slack 미연동이면 조용히 건너뛴다(경고 토스트 방지). 권한 확인은 그 전에 한다.
+    if (!(await isSlackConfigured())) {
+      return Response.json({ skipped: true });
     }
 
     const result = await sendTaskSlackNotification({

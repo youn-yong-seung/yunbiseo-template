@@ -14,6 +14,7 @@ type MyApiKey = {
   key_prefix: string;
   created_at: string;
   last_used_at: string | null;
+  expires_at: string | null;
 };
 
 function formatDateTime(value: string | null) {
@@ -144,6 +145,7 @@ export function MyApiKeys() {
                   <p className="truncate font-medium">{key.name}</p>
                   <p className="text-xs text-muted-foreground">
                     {key.key_prefix} · 만든 날 {formatDateTime(key.created_at)} · 마지막 사용 {formatDateTime(key.last_used_at)}
+                    {key.expires_at ? ` · 만료 ${formatDateTime(key.expires_at)}` : ""}
                   </p>
                 </div>
                 <Button type="button" size="sm" variant="ghost" onClick={() => void handleDelete(key)} aria-label="API 키 지우기">

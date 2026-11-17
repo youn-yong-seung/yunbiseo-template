@@ -9,6 +9,7 @@ export interface IssuedApiKey {
   created_by: string;
   employee_id: string;
   created_at: string;
+  expires_at: string | null;
   /** 원문 키 — 이 반환값에서만 1회 제공된다. 로그·저장 금지. */
   raw_key: string;
 }
@@ -22,7 +23,12 @@ export interface IssuedApiKey {
  */
 export async function issueApiKey(
   supabase: SupabaseClient,
-  { name, employeeId, employeeName }: { name: string; employeeId: string; employeeName: string }
+  {
+    name,
+    employeeId,
+    employeeName,
+    expiresAt = null,
+  }: { name: string; employeeId: string; employeeName: string; expiresAt?: string | null }
 ): Promise<IssuedApiKey> {
   const rawKey = generateApiKey();
   const keyHash = hashApiKey(rawKey);
@@ -36,8 +42,9 @@ export async function issueApiKey(
       key_prefix: keyPrefix,
       created_by: employeeName,
       employee_id: employeeId,
+      expires_at: expiresAt,
     })
-    .select("id, name, key_prefix, created_by, employee_id, created_at")
+    .select("id, name, key_prefix, created_by, employee_id, created_at, expires_at")
     .single();
 
   if (error || !data) {

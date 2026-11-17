@@ -51,9 +51,10 @@ export function formatSlackMention(
   fallbackName?: string | null
 ) {
   const normalized = slackId?.trim();
-  if (normalized) {
+  // 슬랙 회원 id 형식(U·W 로 시작하는 영문 대문자·숫자)만 멘션으로 만든다. 그 밖의 값으로 링크·채널 호출을 만들지 못하게.
+  if (normalized && /^[UW][A-Z0-9]{2,30}$/.test(normalized)) {
     return `<@${normalized}>`;
   }
 
-  return fallbackName?.trim() || "담당자";
+  return (fallbackName?.trim() || "담당자").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }

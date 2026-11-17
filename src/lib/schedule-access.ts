@@ -6,11 +6,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export async function canEditSchedule(scheduleId: string, employee: { id: string; isAdmin: boolean }) {
   if (employee.isAdmin) return true;
   const admin = createAdminClient();
-  const { data } = await admin
+  const { data, error } = await admin
     .from("schedules")
     .select("created_by, schedule_attendees(employee_id)")
     .eq("id", scheduleId)
     .maybeSingle();
+  if (error) return false; // 확인할 수 없으면 막는다(fail-closed)
   if (!data) return true; // 없는 일정은 뒤에서 "찾지 못했습니다"로 처리한다.
   if (data.created_by === employee.id) return true;
   return ((data.schedule_attendees ?? []) as { employee_id: string }[]).some((row) => row.employee_id === employee.id);
@@ -20,11 +21,11 @@ export async function canEditSchedule(scheduleId: string, employee: { id: string
 export async function canEditAllSchedules(scheduleIds: string[], employee: { id: string; isAdmin: boolean }) {
   if (employee.isAdmin || scheduleIds.length === 0) return true;
   const admin = createAdminClient();
-  const { data } = await admin
+  const { data, error } = await admin
     .from("schedules")
     .select("id, created_by, schedule_attendees(employee_id)")
     .in("id", scheduleIds);
-  if (!data || data.length !== new Set(scheduleIds).size) return false;
+  if (error || !data || data.length !== new Set(scheduleIds).size) return false;
   return data.every(
     (row) =>
       row.created_by === employee.id ||

@@ -48,12 +48,14 @@ async function defaultGetParents(id: string): Promise<string[]> {
 /**
  * 주어진 파일·폴더가 모두 허용된 최상위 폴더(또는 그 아래)에 있는지 부모를 따라 올라가며 확인한다.
  * 하나라도 밖에 있거나 확인할 수 없으면 DriveAccessError. 최상위 폴더 설정이 없으면 항상 거부한다.
+ * allowRoot=false 면 최상위 폴더 자체(이름 바꾸기·삭제·이동 대상)도 거부한다.
  */
 export async function assertInsideAllowedRoots(
   ids: string[],
   // 시험용: 부모 조회를 바꿔 끼울 수 있다. 기본은 Drive API.
   getParents: (id: string) => Promise<string[]> = defaultGetParents,
   rootIds: string[] = allowedDriveRootIds(),
+  { allowRoot = true }: { allowRoot?: boolean } = {},
 ) {
   const roots = new Set(rootIds);
   if (roots.size === 0) throw new DriveAccessError("Google Drive 최상위 폴더가 설정되지 않았습니다.");
@@ -70,10 +72,11 @@ export async function assertInsideAllowedRoots(
     } catch {
       parents = [];
     }
-    let ok = false;
+    // 부모가 여럿이면 모두 안쪽이어야 한다(하나라도 바깥 폴더에 걸쳐 있으면 거부).
+    let ok = parents.length > 0;
     for (const parent of parents) {
-      if (await inside(parent, depth + 1)) {
-        ok = true;
+      if (!(await inside(parent, depth + 1))) {
+        ok = false;
         break;
       }
     }
@@ -83,6 +86,7 @@ export async function assertInsideAllowedRoots(
 
   for (const id of ids) {
     if (!isValidDriveId(id)) throw new DriveAccessError("잘못된 Drive id 입니다.");
+    if (!allowRoot && roots.has(id)) throw new DriveAccessError("윤비서 최상위 폴더 자체는 바꾸거나 지울 수 없습니다.");
     if (!(await inside(id, 0))) throw new DriveAccessError("윤비서 Drive 폴더 밖의 파일은 다룰 수 없습니다.");
   }
 }

@@ -78,7 +78,7 @@ export async function PATCH(request: NextRequest) {
     if (typeof name !== "string" || name.length > 200) {
       return NextResponse.json({ error: "name 은 200자 이하 문자열이어야 합니다" }, { status: 400 });
     }
-    await assertInsideAllowedRoots([fileId]);
+    await assertInsideAllowedRoots([fileId], undefined, undefined, { allowRoot: false });
     const result = await renameFile(fileId, name);
     logInfo("RENAME_FILE", `파일/폴더 이름 변경: ${name}`, { resource: "drive_file", resource_id: fileId });
     return NextResponse.json(result);
@@ -105,7 +105,7 @@ export async function DELETE(request: NextRequest) {
     if (!fileId) {
       return NextResponse.json({ error: "fileId 필요" }, { status: 400 });
     }
-    await assertInsideAllowedRoots([fileId]);
+    await assertInsideAllowedRoots([fileId], undefined, undefined, { allowRoot: false });
     await deleteFile(fileId);
     logInfo("DELETE_FILE", `파일 삭제: ${fileId}`, { resource: "drive_file", resource_id: fileId });
     return NextResponse.json({ success: true });

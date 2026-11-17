@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { LockKeyhole, UserRound } from "lucide-react";
-import { Suspense, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { sendLog } from "@/lib/log-client";
 import { createClient } from "@/lib/supabase/client";
+import { Turnstile } from "@/components/turnstile";
 
 function LoginPageInner() {
   const searchParams = useSearchParams();
@@ -27,6 +28,10 @@ function LoginPageInner() {
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // (선택) Turnstile 보안 확인 토큰. 설정이 없으면 쓰지 않는다.
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaReset, setCaptchaReset] = useState(0);
+  const handleCaptcha = useCallback((token: string | null) => setCaptchaToken(token), []);
   const router = useRouter();
 
   const handleLogin = async (event: React.FormEvent) => {
@@ -46,11 +51,12 @@ function LoginPageInner() {
       const res = await fetch("/api/employees/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ login_id: normalizedLoginId, password }),
+        body: JSON.stringify({ login_id: normalizedLoginId, password, captcha_token: captchaToken }),
       });
       const result = await res.json().catch(() => null);
       if (!res.ok || !result?.success) {
         setError(result?.error || "로그인 ID 또는 비밀번호가 올바르지 않습니다.");
+        setCaptchaReset((n) => n + 1);
         setLoading(false);
         return;
       }
@@ -157,6 +163,8 @@ function LoginPageInner() {
                   {error}
                 </div>
               ) : null}
+
+              <Turnstile onToken={handleCaptcha} resetKey={captchaReset} />
 
               <Button type="submit" className="h-11 w-full text-sm font-semibold" disabled={loading}>
                 {loading ? "로그인 중..." : "로그인"}

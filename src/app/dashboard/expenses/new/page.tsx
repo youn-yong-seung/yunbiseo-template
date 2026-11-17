@@ -68,7 +68,7 @@ function NewExpenseContent() {
   const handleSave = async (data: ExpenseInsert) => {
     const { data: inserted, error } = await supabase
       .from("expenses")
-      .insert({ ...data, status: canSettle && data.payment_date ? "paid" : "draft" })
+      .insert({ ...data, ...(canSettle ? {} : { payment_date: null }), status: canSettle && data.payment_date ? "paid" : "draft" })
       .select("id")
       .single();
     if (error) {

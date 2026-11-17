@@ -19,7 +19,9 @@ export async function POST(request: NextRequest) {
 
     // typeId가 null이면 루트 폴더 ID 반환
     if (!typeId) {
-      return NextResponse.json({ driveFolderId: process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID });
+      const root = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
+      if (!root) return NextResponse.json({ error: "Google Drive 연동이 설정되지 않았습니다." }, { status: 400 });
+      return NextResponse.json({ driveFolderId: root });
     }
 
     const supabase = await createClient();
@@ -39,7 +41,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 없으면 _프로젝트 루트 아래에 유형명 폴더 생성
-    const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID!;
+    const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
+    if (!rootFolderId) {
+      return NextResponse.json({ error: "Google Drive 연동이 설정되지 않았습니다." }, { status: 400 });
+    }
     const folder = await createFolder(projectType.name, rootFolderId);
 
     // DB에 drive_folder_id 저장

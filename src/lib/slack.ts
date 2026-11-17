@@ -94,6 +94,22 @@ function normalizeScheduleTime(value: string | null | undefined) {
   return /^\d{2}:\d{2}$/.test(normalized) ? normalized : null;
 }
 
+/**
+ * 슬랙 mrkdwn 에 넣는 사용자 값은 반드시 이걸 거친다. & < > 를 바꿔
+ * 사용자가 넣은 글자로 링크(<http://..|..>)·멘션(<@U..>)·전체 호출(<!channel>)을 만들지 못하게 한다.
+ */
+export function slackEscape(value: unknown): string {
+  return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** 링크로 쓸 주소: http(s) 이고 슬랙 링크 문법을 깨는 글자(| < > 공백)가 없을 때만. */
+function safeSlackUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const url = value.trim();
+  if (!/^https?:\/\/[^\s|<>]+$/.test(url)) return null;
+  return url;
+}
+
 function mrkdwn(text: string): SlackBlock {
   return {
     type: "mrkdwn",
@@ -234,7 +250,7 @@ function getAttendeeNames(schedule: ScheduleSlackRow) {
     })
     .filter((value): value is string => Boolean(value));
 
-  return names.length > 0 ? names.join(", ") : null;
+  return names.length > 0 ? slackEscape(names.join(", ")) : null;
 }
 
 function normalizeReminderEmployee(
@@ -269,13 +285,13 @@ function formatProjectLabel(
   const resolvedProject = normalizeProject(project);
   if (!resolvedProject) return null;
   if (resolvedProject.project_number) {
-    return `[${resolvedProject.project_number}] ${resolvedProject.name ?? ""}`.trim();
+    return slackEscape(`[${resolvedProject.project_number}] ${resolvedProject.name ?? ""}`.trim());
   }
-  return resolvedProject.name ?? null;
+  return resolvedProject.name ? slackEscape(resolvedProject.name) : null;
 }
 
 function buildReminderFallbackText(schedule: ScheduleReminderRow) {
-  return `${formatKstTime(schedule.start_at)}-${formatKstTime(schedule.end_at)} ${schedule.title}`;
+  return `${formatKstTime(schedule.start_at)}-${formatKstTime(schedule.end_at)} ${slackEscape(schedule.title)}`;
 }
 
 function buildUpcomingScheduleReminderBlocks(schedule: ScheduleReminderRow): SlackBlock[] {
@@ -297,7 +313,7 @@ function buildUpcomingScheduleReminderBlocks(schedule: ScheduleReminderRow): Sla
     { type: "divider" },
     {
       type: "section",
-      text: mrkdwn(`*${schedule.title}*`),
+      text: mrkdwn(`*${slackEscape(schedule.title)}*`),
     },
     {
       type: "section",
@@ -310,15 +326,16 @@ function buildUpcomingScheduleReminderBlocks(schedule: ScheduleReminderRow): Sla
       type: "section",
       fields: [
         mrkdwn(`*프로젝트*\n${projectLabel ?? "-"}`),
-        mrkdwn(`*장소*\n${schedule.location ?? "-"}`),
+        mrkdwn(`*장소*\n${schedule.location ? slackEscape(schedule.location) : "-"}`),
       ],
     });
   }
 
-  if (schedule.google_meet_link) {
+  const meetLink = safeSlackUrl(schedule.google_meet_link);
+  if (meetLink) {
     blocks.push({
       type: "section",
-      text: mrkdwn(`:video_camera: *Google Meet*  <${schedule.google_meet_link}|회의 참여하기>`),
+      text: mrkdwn(`:video_camera: *Google Meet*  <${meetLink}|회의 참여하기>`),
     });
   }
 
@@ -344,14 +361,14 @@ function formatScheduleLine(schedule: ScheduleSlackRow) {
   const projectLabel = formatProjectLabel(schedule.projects);
   const details = [
     projectLabel,
-    schedule.location,
+    schedule.location ? slackEscape(schedule.location) : null,
     attendeeNames ? `참석: ${attendeeNames}` : null,
-    schedule.google_meet_link ? `Meet: ${schedule.google_meet_link}` : null,
+    safeSlackUrl(schedule.google_meet_link) ? `Meet: ${safeSlackUrl(schedule.google_meet_link)}` : null,
   ].filter(Boolean);
 
   return details.length > 0
-    ? `• [${timeLabel}] ${schedule.title} (${details.join(" / ")})`
-    : `• [${timeLabel}] ${schedule.title}`;
+    ? `• [${timeLabel}] ${slackEscape(schedule.title)} (${details.join(" / ")})`
+    : `• [${timeLabel}] ${slackEscape(schedule.title)}`;
 }
 
 export async function getSlackSettings() {
@@ -553,7 +570,7 @@ export async function sendMeetingSummarySlackMessage({
     throw new Error("Slack 미팅 채널이 설정되지 않았습니다.");
   }
 
-  const formattedSummary = convertMarkdownToSlackMrkdwn(summary.trim());
+  const formattedSummary = convertMarkdownToSlackMrkdwn(slackEscape(summary.trim()));
   const chunks = splitSlackMessageText(formattedSummary, MAX_SLACK_BLOCK_TEXT_LENGTH);
   let threadTs: string | undefined;
 
@@ -642,10 +659,10 @@ export async function sendProjectCreatedSlackMessage(input: {
 
   const lines = [
     "새 프로젝트가 생성되었습니다.",
-    `프로젝트: ${input.projectNumber} ${input.projectName}`,
-    input.customerName ? `고객: ${input.customerName}` : null,
-    input.status ? `상태: ${input.status}` : null,
-    input.projectUrl ? `링크: ${input.projectUrl}` : null,
+    `프로젝트: ${slackEscape(input.projectNumber)} ${slackEscape(input.projectName)}`,
+    input.customerName ? `고객: ${slackEscape(input.customerName)}` : null,
+    input.status ? `상태: ${slackEscape(input.status)}` : null,
+    safeSlackUrl(input.projectUrl) ? `링크: ${safeSlackUrl(input.projectUrl)}` : null,
   ].filter(Boolean);
 
   return sendSlackMessage({
@@ -723,9 +740,9 @@ function buildTaskChannelRootBlocks({
   creator: TaskSlackAssignee | null;
   shouldMention: boolean;
 }): { blocks: SlackBlock[]; fallback: string } {
-  const title = task.title;
+  const title = slackEscape(task.title);
   const formatPerson = (slackId: string | null, name: string | null) =>
-    shouldMention ? formatSlackMention(slackId, name) : (name?.trim() || "담당자");
+    shouldMention ? formatSlackMention(slackId, name) : slackEscape(name?.trim() || "담당자");
   const mentionLine =
     assignees.length > 0
       ? assignees.map((a) => formatPerson(a.slack_id, a.name)).join(" ")
@@ -739,11 +756,11 @@ function buildTaskChannelRootBlocks({
   ];
 
   const fields: SlackBlock[] = [];
-  if (task.status) fields.push(mrkdwn(`*상태*\n${task.status}`));
-  if (task.priority) fields.push(mrkdwn(`*우선순위*\n${task.priority}`));
+  if (task.status) fields.push(mrkdwn(`*상태*\n${slackEscape(task.status)}`));
+  if (task.priority) fields.push(mrkdwn(`*우선순위*\n${slackEscape(task.priority)}`));
   fields.push(mrkdwn(`*담당자*\n${mentionLine}`));
-  if (task.due_date) fields.push(mrkdwn(`*마감일*\n${task.due_date}`));
-  if (task.start_date) fields.push(mrkdwn(`*시작일*\n${task.start_date}`));
+  if (task.due_date) fields.push(mrkdwn(`*마감일*\n${slackEscape(task.due_date)}`));
+  if (task.start_date) fields.push(mrkdwn(`*시작일*\n${slackEscape(task.start_date)}`));
   if (projectLabel) fields.push(mrkdwn(`*프로젝트*\n${projectLabel}`));
   if (fields.length > 0) {
     blocks.push({ type: "section", fields: fields.slice(0, 10) });
@@ -755,11 +772,11 @@ function buildTaskChannelRootBlocks({
       description.length > MAX_TASK_DESCRIPTION_LENGTH
         ? `${description.slice(0, MAX_TASK_DESCRIPTION_LENGTH)}…`
         : description;
-    blocks.push({ type: "section", text: mrkdwn(`*설명*\n${trimmed}`) });
+    blocks.push({ type: "section", text: mrkdwn(`*설명*\n${slackEscape(trimmed)}`) });
   }
 
   const contextElements: SlackBlock[] = [];
-  if (taskUrl) contextElements.push(mrkdwn(`<${taskUrl}|할일 보러가기>`));
+  if (safeSlackUrl(taskUrl)) contextElements.push(mrkdwn(`<${safeSlackUrl(taskUrl)}|할일 보러가기>`));
   const creatorLabel = creator ? formatPerson(creator.slack_id, creator.name) : null;
   if (creatorLabel) contextElements.push(mrkdwn(`등록자: ${creatorLabel}`));
   if (contextElements.length > 0) {
@@ -779,8 +796,8 @@ function buildTaskStatusReplyBlocks({
   actorName: string | null;
 }): { blocks: SlackBlock[]; fallback: string } {
   const transitionLine = prevStatus
-    ? `${statusEmoji(newStatus)} *${prevStatus}* → *${newStatus}*`
-    : `${statusEmoji(newStatus)} *${newStatus}*`;
+    ? `${statusEmoji(newStatus)} *${slackEscape(prevStatus)}* → *${slackEscape(newStatus)}*`
+    : `${statusEmoji(newStatus)} *${slackEscape(newStatus)}*`;
 
   const blocks: SlackBlock[] = [
     { type: "section", text: mrkdwn(transitionLine) },
@@ -788,13 +805,13 @@ function buildTaskStatusReplyBlocks({
   if (actorName) {
     blocks.push({
       type: "context",
-      elements: [mrkdwn(`변경자: ${actorName}`)],
+      elements: [mrkdwn(`변경자: ${slackEscape(actorName)}`)],
     });
   }
 
   const fallback = prevStatus
-    ? `상태 변경: ${prevStatus} → ${newStatus}`
-    : `상태: ${newStatus}`;
+    ? `상태 변경: ${slackEscape(prevStatus)} → ${slackEscape(newStatus)}`
+    : `상태: ${slackEscape(newStatus)}`;
   return { blocks, fallback };
 }
 
@@ -1015,10 +1032,10 @@ function buildExpenseRootBlocks({
   const project = normalizeSingle(expense.projects);
   const expenseType = normalizeSingle(expense.expense_types);
   const approver = normalizeSingle(expense.approver);
-  const vendorLabel = vendor?.name || expense.vendor_name || "-";
+  const vendorLabel = slackEscape(vendor?.name || expense.vendor_name || "-");
   const projectLabel = project?.project_number
-    ? `[${project.project_number}] ${project.name ?? ""}`.trim()
-    : project?.name ?? null;
+    ? slackEscape(`[${project.project_number}] ${project.name ?? ""}`.trim())
+    : project?.name ? slackEscape(project.name) : null;
   const mention = approver
     ? formatSlackMention(approver.slack_id, approver.name)
     : "미배정";
@@ -1027,7 +1044,7 @@ function buildExpenseRootBlocks({
   const blocks: SlackBlock[] = [
     { type: "section", text: mrkdwn(":memo: *새 매입 결의가 올라왔습니다*") },
     { type: "divider" },
-    { type: "section", text: mrkdwn(`*${expense.title}*`) },
+    { type: "section", text: mrkdwn(`*${slackEscape(expense.title)}*`) },
   ];
 
   const fields: SlackBlock[] = [
@@ -1040,25 +1057,25 @@ function buildExpenseRootBlocks({
     fields.push(mrkdwn(`*실지급액*\n${formatWon(expense.net_payment_amount)}`));
   }
   if (expense.purchase_date)
-    fields.push(mrkdwn(`*매입일*\n${expense.purchase_date}`));
+    fields.push(mrkdwn(`*매입일*\n${slackEscape(expense.purchase_date)}`));
   if (expense.payment_date)
-    fields.push(mrkdwn(`*지급일*\n${expense.payment_date}`));
-  if (expenseType?.name) fields.push(mrkdwn(`*유형*\n${expenseType.name}`));
+    fields.push(mrkdwn(`*지급일*\n${slackEscape(expense.payment_date)}`));
+  if (expenseType?.name) fields.push(mrkdwn(`*유형*\n${slackEscape(expenseType.name)}`));
   if (projectLabel) fields.push(mrkdwn(`*프로젝트*\n${projectLabel}`));
   fields.push(mrkdwn(`*승인자*\n${mention}`));
 
   blocks.push({ type: "section", fields: fields.slice(0, 10) });
 
   const context: SlackBlock[] = [];
-  if (expenseUrl) context.push(mrkdwn(`<${expenseUrl}|매입 상세 보러가기>`));
-  if (actorName) context.push(mrkdwn(`요청자: ${actorName}`));
+  if (safeSlackUrl(expenseUrl)) context.push(mrkdwn(`<${safeSlackUrl(expenseUrl)}|매입 상세 보러가기>`));
+  if (actorName) context.push(mrkdwn(`요청자: ${slackEscape(actorName)}`));
   if (context.length > 0) {
     blocks.push({ type: "context", elements: context });
   }
 
   return {
     blocks,
-    fallback: `새 매입 결의: ${expense.title} ${formatWon(expense.total_amount)}`,
+    fallback: `새 매입 결의: ${slackEscape(expense.title)} ${formatWon(expense.total_amount)}`,
   };
 }
 
@@ -1092,15 +1109,15 @@ function buildExpenseReplyBlocks({
   const detailLines: string[] = [];
   if (event === "paid") {
     detailLines.push(
-      `*지급일*: ${expense.payment_date ?? "-"}`,
+      `*지급일*: ${slackEscape(expense.payment_date ?? "-")}`,
       `*실지급액*: ${formatWon(expense.net_payment_amount ?? expense.total_amount)}`
     );
   }
   if (event === "scheduled" && expense.payment_date) {
-    detailLines.push(`*지급예정일*: ${expense.payment_date}`);
+    detailLines.push(`*지급예정일*: ${slackEscape(expense.payment_date)}`);
   }
   if ((event === "rejected" || event === "cancelled") && reason) {
-    detailLines.push(`*사유*: ${reason}`);
+    detailLines.push(`*사유*: ${slackEscape(reason)}`);
   }
 
   const headline = `${emoji} *${label}*${mentionLine}`;
@@ -1108,10 +1125,10 @@ function buildExpenseReplyBlocks({
 
   const blocks: SlackBlock[] = [{ type: "section", text: mrkdwn(body) }];
   if (actorName) {
-    blocks.push({ type: "context", elements: [mrkdwn(`변경자: ${actorName}`)] });
+    blocks.push({ type: "context", elements: [mrkdwn(`변경자: ${slackEscape(actorName)}`)] });
   }
 
-  return { blocks, fallback: `${label}: ${expense.title}` };
+  return { blocks, fallback: `${label}: ${slackEscape(expense.title)}` };
 }
 
 export async function sendExpenseSlackNotification({
@@ -1220,7 +1237,7 @@ export async function sendDepositSlackNotification({
   }
 
   const formattedAmount = `${amount.toLocaleString("ko-KR")}원`;
-  const fallback = `${depositorName}에서 ${formattedAmount} 입금되었습니다`;
+  const fallback = `${slackEscape(depositorName)}에서 ${formattedAmount} 입금되었습니다`;
 
   return sendSlackMessage({
     channel: depositChannel,
@@ -1231,7 +1248,7 @@ export async function sendDepositSlackNotification({
       { type: "divider" },
       {
         type: "section",
-        text: mrkdwn(`*${depositorName}* 님에게서\n*${formattedAmount}* 입금되었습니다`),
+        text: mrkdwn(`*${slackEscape(depositorName)}* 님에게서\n*${formattedAmount}* 입금되었습니다`),
       },
     ],
   });
@@ -1294,9 +1311,9 @@ function formatOptionalKstDateTime(iso: string | null | undefined) {
 function formatTaxInvoiceProject(project: TaxInvoiceSlackProject | null) {
   if (!project) return null;
   if (project.project_number) {
-    return `[${project.project_number}] ${project.name ?? ""}`.trim();
+    return slackEscape(`[${project.project_number}] ${project.name ?? ""}`.trim());
   }
-  return project.name ?? null;
+  return project.name ? slackEscape(project.name) : null;
 }
 
 function buildTaxInvoiceIssuedBlocks({
@@ -1308,16 +1325,16 @@ function buildTaxInvoiceIssuedBlocks({
 }): { blocks: SlackBlock[]; fallback: string } {
   const project = normalizeSingle(revenue.projects);
   const customer = normalizeSingle(project?.customers);
-  const customerLabel = customer?.name ?? project?.client ?? "-";
+  const customerLabel = slackEscape(customer?.name ?? project?.client ?? "-");
   const projectLabel = formatTaxInvoiceProject(project);
-  const taxInvoiceUrl = revenue.tax_invoice_url?.trim() || null;
+  const taxInvoiceUrl = safeSlackUrl(revenue.tax_invoice_url);
 
   const fields: SlackBlock[] = [
     mrkdwn(`*거래처*\n${customerLabel}`),
     mrkdwn(`*총액*\n${formatWon(revenue.total_amount)}`),
     mrkdwn(`*공급가액*\n${formatWon(revenue.supply_amount)}`),
     mrkdwn(`*부가세*\n${formatWon(revenue.vat_amount)}`),
-    mrkdwn(`*발행일*\n${revenue.tax_invoice_date ?? "-"}`),
+    mrkdwn(`*발행일*\n${slackEscape(revenue.tax_invoice_date ?? "-")}`),
     mrkdwn(`*발행시각*\n${formatOptionalKstDateTime(revenue.tax_invoice_issued_at)}`),
   ];
 
@@ -1325,19 +1342,19 @@ function buildTaxInvoiceIssuedBlocks({
     fields.push(mrkdwn(`*프로젝트*\n${projectLabel}`));
   }
   if (customer?.business_number) {
-    fields.push(mrkdwn(`*사업자번호*\n${customer.business_number}`));
+    fields.push(mrkdwn(`*사업자번호*\n${slackEscape(customer.business_number)}`));
   }
   if (revenue.tax_invoice_nts_transaction_id) {
-    fields.push(mrkdwn(`*국세청 승인번호*\n${revenue.tax_invoice_nts_transaction_id}`));
+    fields.push(mrkdwn(`*국세청 승인번호*\n${slackEscape(revenue.tax_invoice_nts_transaction_id)}`));
   }
   if (revenue.tax_invoice_issuance_key) {
-    fields.push(mrkdwn(`*발행키*\n${revenue.tax_invoice_issuance_key}`));
+    fields.push(mrkdwn(`*발행키*\n${slackEscape(revenue.tax_invoice_issuance_key)}`));
   }
 
   const blocks: SlackBlock[] = [
     { type: "section", text: mrkdwn(":receipt: *세금계산서 발행 완료*") },
     { type: "divider" },
-    { type: "section", text: mrkdwn(`*${revenue.title}*`) },
+    { type: "section", text: mrkdwn(`*${slackEscape(revenue.title)}*`) },
     { type: "section", fields: fields.slice(0, 10) },
   ];
 
@@ -1345,8 +1362,8 @@ function buildTaxInvoiceIssuedBlocks({
   if (taxInvoiceUrl) {
     context.push(mrkdwn(`<${taxInvoiceUrl}|세금계산서 보기>`));
   }
-  if (revenueUrl) {
-    context.push(mrkdwn(`<${revenueUrl}|매출 상세 보기>`));
+  if (safeSlackUrl(revenueUrl)) {
+    context.push(mrkdwn(`<${safeSlackUrl(revenueUrl)}|매출 상세 보기>`));
   }
   if (context.length > 0) {
     blocks.push({ type: "context", elements: context });
@@ -1354,7 +1371,7 @@ function buildTaxInvoiceIssuedBlocks({
 
   return {
     blocks,
-    fallback: `세금계산서 발행 완료: ${revenue.title} ${formatWon(revenue.total_amount)}`,
+    fallback: `세금계산서 발행 완료: ${slackEscape(revenue.title)} ${formatWon(revenue.total_amount)}`,
   };
 }
 

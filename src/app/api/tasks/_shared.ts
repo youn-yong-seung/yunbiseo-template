@@ -43,7 +43,13 @@ export async function resolveAssigneeIds(supabase: Admin, assignees: unknown): P
       ids.push(value);
       continue;
     }
-    const { data, error } = await supabase.from("employees").select("id").ilike("name", value).limit(1).maybeSingle();
+    // LIKE 특수문자(% _ \\)는 글자 그대로 찾는다(와일드카드로 아무 직원이나 잡히지 않게).
+    const { data, error } = await supabase
+      .from("employees")
+      .select("id")
+      .ilike("name", value.replace(/[\\%_]/g, (ch) => `\\${ch}`))
+      .limit(1)
+      .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) throw new BadRequest(`assignee not found: ${value}`);
     ids.push(data.id as string);
@@ -58,7 +64,7 @@ export async function selectTask(supabase: Admin, id: string) {
 }
 
 /**
- * 할 일을 고치거나 지울 수 있는지: 관리자, 만든 사람, 담당자(assigned_to·공동 담당), 만든 사람 기록이 없는 옛 할 일.
+ * 할 일을 고치거나 지울 수 있는지: 관리자, 만든 사람, 담당자(assigned_to·공동 담당).
  * DB 정책 public.can_edit_task 와 같은 기준이다. 안 되면 Forbidden 을 던진다.
  */
 export class Forbidden extends Error {}
@@ -76,8 +82,8 @@ export async function assertCanEditTask(
     .maybeSingle();
   if (!task) return; // 없는 할 일은 뒤에서 404 로 처리한다.
   const assignees = ((task.task_assignees ?? []) as { employee_id: string }[]).map((row) => row.employee_id);
+  // 만든 사람이 비어 있는 옛 할 일은 관리자·담당자만 고친다.
   const ok =
-    task.created_by === null ||
     task.created_by === employee.id ||
     task.assigned_to === employee.id ||
     assignees.includes(employee.id);

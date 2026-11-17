@@ -1085,10 +1085,11 @@ export default function SettingsPage() {
 
             <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
               웹훅 URL은{" "}
-              <span className="font-mono">
-                /api/bolta/webhook?secret=&lt;Webhook Secret&gt;
-              </span>{" "}
-              형태로 Bolta에 등록하면 됩니다.
+              <span className="font-mono">/api/bolta/webhook</span>{" "}
+              이고, 요청 헤더{" "}
+              <span className="font-mono">x-bolta-webhook-secret</span> 에 위 Webhook Secret 을 넣도록 Bolta 에 등록합니다.
+              주소에 secret 을 붙이는 방식(?secret=)은 보안상 받지 않습니다. 헤더를 넣을 수 없으면 웹훅 없이 매출 화면의
+              &apos;상태 다시 확인&apos;(yb revenue tax-invoice sync)을 씁니다.
             </div>
 
             <div className="flex justify-end">

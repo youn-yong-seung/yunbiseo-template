@@ -43,6 +43,7 @@ type ApiKeyRow = {
   id: string;
   name: string;
   employee_id: string | null;
+  expires_at: string | null;
   employees: {
     id: string;
     name: string;
@@ -57,7 +58,7 @@ type ApiKeyRow = {
  * 요청의 API 키(x-api-key 또는 Authorization: Bearer)를 확인하고 키 주인 직원을 돌려준다.
  *
  * - DB 에는 sha256 해시만 있다. 원문 키는 비교에 쓰고 버린다.
- * - 폐기된 키(is_active=false), 주인이 없는 키, 주인 직원이 비활성인 키는 거부한다.
+ * - 폐기된 키(is_active=false), 만료된 키, 주인이 없는 키, 주인 직원이 비활성인 키는 거부한다.
  * - 환경변수로 만든 "주인 없는 공용 키"는 받지 않는다(누가 한 일인지 알 수 없고 권한을 좁힐 수 없다).
  */
 export async function validateApiKeyRecord(request: Request): Promise<ApiKeyRecord | null> {
@@ -67,7 +68,7 @@ export async function validateApiKeyRecord(request: Request): Promise<ApiKeyReco
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("api_keys")
-    .select("id, name, employee_id, employees!api_keys_employee_id_fkey(id, name, employee_type, is_finance, auth_uid, is_active)")
+    .select("id, name, employee_id, expires_at, employees!api_keys_employee_id_fkey(id, name, employee_type, is_finance, auth_uid, is_active)")
     .eq("key_hash", hashApiKey(key))
     .eq("is_active", true)
     .maybeSingle();
@@ -75,6 +76,8 @@ export async function validateApiKeyRecord(request: Request): Promise<ApiKeyReco
   if (error || !data) return null;
   const row = data as unknown as ApiKeyRow;
   if (!row.employee_id || !row.employees || row.employees.is_active !== true) return null;
+  // 만료일이 지난 키(yb login 키는 90일)는 거부한다.
+  if (row.expires_at && new Date(row.expires_at).getTime() <= Date.now()) return null;
 
   supabase
     .from("api_keys")

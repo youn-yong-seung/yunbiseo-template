@@ -36,6 +36,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useMasking } from "@/components/masking-provider";
 import { MyApiKeys } from "@/components/my-api-keys";
+import { Turnstile } from "@/components/turnstile";
 import { clearClientSession, createClient } from "@/lib/supabase/client";
 import { sendLog } from "@/lib/log-client";
 
@@ -66,6 +67,8 @@ export default function MyPage() {
   });
   const [saving, setSaving] = useState(false);
   const [pwDialogOpen, setPwDialogOpen] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const handleCaptcha = useCallback((token: string | null) => setCaptchaToken(token), []);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -192,6 +195,7 @@ export default function MyPage() {
         body: JSON.stringify({
           current_password: currentPassword,
           new_password: newPassword,
+          captcha_token: captchaToken,
         }),
       });
 
@@ -448,6 +452,7 @@ export default function MyPage() {
                 />
               </Field>
             </div>
+            <Turnstile onToken={handleCaptcha} />
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setPwDialogOpen(false)}>
                 취소

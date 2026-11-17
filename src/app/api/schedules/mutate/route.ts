@@ -346,7 +346,7 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (existingError || !existing) {
-        throw new Error(existingError?.message ?? "기존 일정을 찾지 못했습니다.");
+        throw new Error("기존 일정을 찾지 못했습니다.");
       }
 
       const normalizedExisting = existing as ScheduleSeriesRow;
@@ -498,7 +498,7 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (existingError || !existing) {
-        throw new Error(existingError?.message ?? "기존 일정을 찾지 못했습니다.");
+        throw new Error("기존 일정을 찾지 못했습니다.");
       }
 
       const normalizedExisting = existing as ScheduleSeriesRow;

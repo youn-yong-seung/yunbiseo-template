@@ -75,7 +75,12 @@ export default function EditExpensePage() {
           : expense?.status;
     const { error } = await supabase
       .from("expenses")
-      .update({ ...data, ...(nextStatus ? { status: nextStatus } : {}) })
+      .update({
+        ...data,
+        // 지급일은 관리자·재무만 바꾼다(직원이 고친 값은 원래 값으로 둔다).
+        ...(canSettle ? {} : { payment_date: expense?.payment_date ?? null }),
+        ...(nextStatus ? { status: nextStatus } : {}),
+      })
       .eq("id", expenseId);
     if (error) {
       console.error("매입 수정 실패:", error.message);

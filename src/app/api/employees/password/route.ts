@@ -8,13 +8,13 @@ import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth
 // PATCH: 본인 비밀번호 변경
 export async function PATCH(request: NextRequest) {
   try {
-    const { user, authUnavailable } = await requireRouteUser();
+    const { user, employee, authUnavailable } = await requireRouteUser();
 
-    if (!user) {
+    if (!user || !employee) {
       return createRouteAuthErrorResponse(authUnavailable);
     }
 
-    const { current_password, new_password } = (await request.json().catch(() => null)) ?? {};
+    const { current_password, new_password, captcha_token } = (await request.json().catch(() => null)) ?? {};
 
     if (!current_password || !new_password) {
       return NextResponse.json(
@@ -35,6 +35,16 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "인증된 이메일이 없습니다" }, { status: 400 });
     }
 
+    // 현재 비밀번호 확인도 로그인과 같은 시도 제한을 받는다(세션만 훔친 사람이 비밀번호를 맞혀 보지 못하게).
+    const adminSupabase = createAdminClient();
+    const { data: reserved } = await adminSupabase.rpc("reserve_login_attempt", { p_employee_id: employee.id });
+    if (reserved !== true) {
+      return NextResponse.json(
+        { error: "비밀번호를 여러 번 틀려 15분 동안 변경할 수 없습니다." },
+        { status: 429 }
+      );
+    }
+
     // 현재 비밀번호 확인 (세션에 영향 없는 별도 클라이언트 사용)
     const verifyClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -43,10 +53,12 @@ export async function PATCH(request: NextRequest) {
     );
     const { error: signInError } = await verifyClient.auth.signInWithPassword({
       email: user.email,
-      password: current_password,
+      password: String(current_password),
+      ...(typeof captcha_token === "string" && captcha_token ? { options: { captchaToken: captcha_token } } : {}),
     });
 
     if (signInError) {
+      await adminSupabase.rpc("record_login_failure", { p_employee_id: employee.id });
       return NextResponse.json(
         { error: "현재 비밀번호가 일치하지 않습니다" },
         { status: 400 }
@@ -54,7 +66,6 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Admin client로 비밀번호 변경
-    const adminSupabase = createAdminClient();
     const { error } = await adminSupabase.auth.admin.updateUserById(user.id, {
       password: new_password,
     });
@@ -73,6 +84,7 @@ export async function PATCH(request: NextRequest) {
         failed_login_count: 0,
         failed_login_window_started_at: null,
         last_failed_login_at: null,
+        login_locked_until: null,
       })
       .eq("auth_uid", user.id);
 

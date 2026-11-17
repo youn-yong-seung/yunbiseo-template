@@ -1,56 +1,75 @@
 import { createHash, randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
+import { hashUserCode, normalizeUserCode, sameHash } from "@/lib/cli-auth";
 import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { UUID_RE } from "@/lib/yb-api/refs";
 
-const CODE_TTL_SECONDS = 600; // 10분
-const CHALLENGE_RE = /^[A-Za-z0-9_-]{43,128}$/;
+const MAX_CODE_ATTEMPTS = 5;
 
 /**
- * yb CLI 브라우저 로그인 1단계: 로그인한 직원이 1회용 인증 코드를 발급받는다.
- * - 세션 필수(활성 직원만). 코드는 그 직원 id 에 묶인다.
- * - 원문 코드는 응답으로만 돌려주고 DB 에는 sha256 해시만 저장한다.
- * - code_challenge(PKCE, S256)는 필수다. 교환할 때 원래 verifier 가 있어야 한다.
+ * yb login 승인: 로그인한 직원이 yb 가 등록한 요청(request_id)을 터미널의 확인 코드로 승인한다.
+ * POST { request_id, user_code } → { code }  (1회용 교환 코드, 원문은 응답으로만)
+ *
+ * - 확인 코드가 맞아야 한다(5번 틀리면 그 요청은 못 쓰게 된다). 남이 보낸 주소를 눌러 주는 것만으로는 승인되지 않는다.
+ * - 승인한 직원 id 에 묶이고, 교환할 때 yb 가 가진 PKCE verifier 가 있어야 키가 나온다.
  */
 export async function POST(request: NextRequest) {
   const { user, employee, authUnavailable } = await requireRouteUser();
   if (!user || !employee) return createRouteAuthErrorResponse(authUnavailable);
 
   const body = await request.json().catch(() => null);
-  const challengeRaw = typeof body?.code_challenge === "string" ? body.code_challenge.trim() : "";
-  // PKCE 는 필수다. yb 가 만든 code_challenge 가 없으면 코드를 만들지 않는다.
-  if (!CHALLENGE_RE.test(challengeRaw)) {
-    return NextResponse.json(
-      { error: "잘못된 인증 요청입니다. 터미널에서 yb login 을 다시 실행해 주세요(yb 를 최신으로 받아야 합니다)." },
-      { status: 400 }
-    );
+  const requestId = typeof body?.request_id === "string" ? body.request_id : "";
+  const userCode = typeof body?.user_code === "string" ? normalizeUserCode(body.user_code) : "";
+  if (!UUID_RE.test(requestId) || userCode.length !== 8) {
+    return NextResponse.json({ error: "확인 코드 8자를 정확히 입력해 주세요." }, { status: 400 });
+  }
+
+  const admin = createAdminClient();
+  const { data: row } = await admin
+    .from("cli_auth_requests")
+    .select("id, user_code_hash, employee_id, consumed_at, expires_at, failed_attempts, code_challenge")
+    .eq("id", requestId)
+    .maybeSingle();
+
+  if (
+    !row ||
+    !row.user_code_hash ||
+    !row.code_challenge ||
+    row.employee_id ||
+    row.consumed_at ||
+    new Date(row.expires_at).getTime() < Date.now() ||
+    row.failed_attempts >= MAX_CODE_ATTEMPTS
+  ) {
+    return NextResponse.json({ error: "만료됐거나 이미 처리된 요청입니다. 터미널에서 yb login 을 다시 실행해 주세요." }, { status: 410 });
+  }
+
+  if (!sameHash(hashUserCode(userCode), String(row.user_code_hash))) {
+    await admin.from("cli_auth_requests").update({ failed_attempts: row.failed_attempts + 1 }).eq("id", row.id);
+    return NextResponse.json({ error: "확인 코드가 터미널에 보이는 코드와 다릅니다." }, { status: 403 });
   }
 
   const code = randomBytes(24).toString("hex");
-  const codeHash = createHash("sha256").update(code).digest("hex");
-  const expiresAt = new Date(Date.now() + CODE_TTL_SECONDS * 1000).toISOString();
+  const { data: approved, error } = await admin
+    .from("cli_auth_requests")
+    .update({
+      code_hash: createHash("sha256").update(code).digest("hex"),
+      employee_id: employee.id,
+      employee_name: employee.name,
+      auth_uid: user.id,
+      approved_at: new Date().toISOString(),
+    })
+    .eq("id", row.id)
+    .is("employee_id", null)
+    .is("consumed_at", null)
+    .select("id")
+    .maybeSingle();
 
-  const admin = createAdminClient();
-  const { error } = await admin.from("cli_auth_requests").insert({
-    code_hash: codeHash,
-    employee_name: employee.name,
-    employee_id: employee.id,
-    auth_uid: user.id,
-    expires_at: expiresAt,
-    code_challenge: challengeRaw,
-  });
-
-  if (error) {
-    return NextResponse.json(
-      { error: "인증 코드 생성에 실패했습니다." },
-      { status: 500 }
-    );
+  if (error || !approved) {
+    return NextResponse.json({ error: "승인하지 못했습니다. yb login 을 다시 실행해 주세요." }, { status: 409 });
   }
 
   // 원문 코드는 로그로 남기지 않는다.
-  return NextResponse.json(
-    { code, expires_in: CODE_TTL_SECONDS },
-    { headers: { "cache-control": "no-store" } }
-  );
+  return NextResponse.json({ code }, { headers: { "cache-control": "no-store" } });
 }

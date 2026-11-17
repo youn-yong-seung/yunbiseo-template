@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const admin = createAdminClient();
     let query = admin
       .from("api_keys")
-      .select("id, name, key_prefix, created_by, employee_id, last_used_at, is_active, created_at, updated_at")
+      .select("id, name, key_prefix, created_by, employee_id, last_used_at, is_active, created_at, updated_at, expires_at")
       .eq("is_active", true)
       .order("created_at", { ascending: false });
     // 관리자도 마이페이지(scope=mine)에서는 자기 키만 본다.

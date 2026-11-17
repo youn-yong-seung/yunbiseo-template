@@ -13,7 +13,7 @@ import os from "node:os";
 import http from "node:http";
 import crypto from "node:crypto";
 import readline from "node:readline";
-import { execSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 const VERSION = "0.9.1";
 
@@ -55,10 +55,43 @@ function studentAllows(command, sub) {
 }
 
 // 윤비서 주소가 비어 있으면(수강생판 첫 실행) 지정 방법을 알려 주고 멈춘다.
+// https 가 아닌 원격 주소(내 컴퓨터 localhost·127.0.0.1·::1 제외)는 키가 그대로 노출되므로 쓰지 않는다.
 function requireBase(value) {
   const base = String(value || "").replace(/\/$/, "");
   if (!base) fail("윤비서 주소가 없습니다. 처음 한 번 실행: yb login --url https://내-윤비서-주소");
-  return base;
+  let url;
+  try {
+    url = new URL(base);
+  } catch {
+    fail(`윤비서 주소가 올바르지 않습니다: ${base}`);
+  }
+  if (url.username || url.password) fail("윤비서 주소에 사용자 이름·비밀번호(@)를 넣을 수 없습니다.");
+  const local = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) {
+    fail(`https 가 아닌 원격 주소는 쓸 수 없습니다(키가 암호화되지 않고 전송됩니다): ${url.origin}`);
+  }
+  return url.origin + url.pathname.replace(/\/$/, "");
+}
+
+// 대상 주소: YB_BASE_URL 환경변수는 YB_API_KEY 환경변수와 함께 줄 때만 쓴다
+// (저장된 키를 환경변수 한 줄로 다른 주소에 보내지 않게).
+function resolveBase(config) {
+  if (process.env.YB_BASE_URL && !process.env.YB_API_KEY) {
+    process.stderr.write("yb: YB_BASE_URL 은 YB_API_KEY 와 함께일 때만 씁니다. 저장된 주소로 보냅니다.\n");
+  }
+  const envBase = process.env.YB_BASE_URL && process.env.YB_API_KEY ? process.env.YB_BASE_URL : "";
+  return requireBase(envBase || config.base_url || DEFAULT_URL);
+}
+
+// 리다이렉트를 따라가지 않는 fetch. 3xx 를 따라가면 키·코드가 다른 주소로 다시 보내질 수 있다.
+async function safeFetch(url, init = {}) {
+  const res = await fetch(url, { ...init, redirect: "manual" });
+  if (res.status >= 300 && res.status < 400) {
+    const err = new Error(`리다이렉트 응답(${res.status})은 따라가지 않습니다. 윤비서 주소(https·www 여부)를 정확히 넣으세요.`);
+    err.redirect = true;
+    throw err;
+  }
+  return res;
 }
 
 // ---------------------------------------------------------------- config
@@ -198,7 +231,7 @@ async function request(method, apiPath, { query, body, form, soft = false } = {}
     );
   }
   // YB_BASE_URL/YB_API_KEY 환경변수로 대상 서버를 임시 오버라이드할 수 있다 (로컬 개발 서버 검증용)
-  const base = requireBase(process.env.YB_BASE_URL || config.base_url || DEFAULT_URL);
+  const base = resolveBase(config);
   // 키가 설정한 윤비서 주소 밖으로 나가지 않게 한다("@다른호스트", "//다른호스트", 절대 주소 등).
   const baseUrl = new URL(base);
   if (typeof apiPath !== "string" || !apiPath.startsWith("/") || apiPath.startsWith("//") || apiPath.includes("\\")) {
@@ -221,10 +254,10 @@ async function request(method, apiPath, { query, body, form, soft = false } = {}
 
   let res;
   try {
-    res = await fetch(url, init);
+    res = await safeFetch(url, init);
   } catch (error) {
-    if (soft) return null;
-    fail(`요청 실패: ${error.message} (${url})`);
+    if (soft && !error.redirect) return null;
+    fail(`요청 실패: ${error.message} (${url.origin}${url.pathname})`);
   }
 
   const text = await res.text();
@@ -276,15 +309,16 @@ function buildBody(flags, fieldMap) {
 
 // ---------------------------------------------------------------- login (브라우저 인증)
 
+// 셸을 거치지 않고 인자 배열로 브라우저를 연다(주소의 $() · 백틱 · & 가 명령으로 실행되지 않게).
 function openBrowser(url) {
   try {
+    if (!/^https?:\/\//.test(url)) return;
     if (process.platform === "darwin") {
-      execSync(`open ${JSON.stringify(url)}`, { stdio: "ignore" });
+      execFileSync("open", [url], { stdio: "ignore" });
     } else if (process.platform === "win32") {
-      // cmd 기본 셸에서 start "" "url" — 빈 제목 인자 뒤 URL을 큰따옴표로 감싸 &가 명령 구분자로 끊기지 않게 한다.
-      execSync(`start "" ${JSON.stringify(url)}`, { stdio: "ignore", shell: true });
+      execFileSync("rundll32", ["url.dll,FileProtocolHandler", url], { stdio: "ignore" });
     } else {
-      execSync(`xdg-open ${JSON.stringify(url)}`, { stdio: "ignore" });
+      execFileSync("xdg-open", [url], { stdio: "ignore" });
     }
   } catch {
     // 브라우저 자동 실행 실패는 무시 — URL은 이미 출력했다.
@@ -340,17 +374,9 @@ function promptSecret(question) {
   });
 }
 
-// http:// 주소는 키가 암호화되지 않고 오간다. 내 컴퓨터(localhost)가 아니면 경고한다.
+// 주소 확인(https, 또는 내 컴퓨터 http). 맞지 않으면 멈춘다.
 function warnIfInsecure(base) {
-  try {
-    const url = new URL(base);
-    const local = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
-    if (url.protocol === "http:" && !local) {
-      process.stderr.write(`yb: 경고 — ${url.origin} 은 https 가 아니라서 API 키가 암호화되지 않고 전송됩니다. 배포 주소는 https:// 로 쓰세요.\n`);
-    }
-  } catch {
-    fail(`윤비서 주소가 올바르지 않습니다: ${base}`);
-  }
+  requireBase(base);
 }
 
 function promptStdin(question) {
@@ -372,7 +398,7 @@ function createPkce() {
   return { verifier, challenge };
 }
 
-async function loginBrowser(base, state, challenge) {
+async function loginBrowser(base, state, challenge, requestId = null) {
   const server = http.createServer();
   let settle;
   const codePromise = new Promise((resolve, reject) => {
@@ -420,7 +446,9 @@ async function loginBrowser(base, state, challenge) {
     server.listen(0, "127.0.0.1", resolve);
   });
   const { port } = server.address();
-  const authUrl = `${base}/cli-auth?port=${port}&state=${state}&challenge=${challenge}`;
+  const authUrl = requestId
+    ? `${base}/cli-auth?request=${requestId}&port=${port}&state=${state}`
+    : `${base}/cli-auth?port=${port}&state=${state}&challenge=${challenge}`;
   process.stdout.write(`브라우저에서 윤비서 로그인 후 인증을 완료하세요. 창이 열리지 않으면 아래 주소를 직접 여세요:\n\n  ${authUrl}\n\n`);
   openBrowser(authUrl);
 
@@ -436,7 +464,7 @@ async function loginBrowser(base, state, challenge) {
 async function exchangeCode(base, code, flags, config, verifier) {
   let res;
   try {
-    res = await fetch(`${base}/api/cli-auth/exchange`, {
+    res = await safeFetch(`${base}/api/cli-auth/exchange`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ code, hostname: os.hostname(), code_verifier: verifier }),
@@ -482,6 +510,38 @@ async function login(flags) {
   warnIfInsecure(base);
 
   const pkce = createPkce();
+
+  // 수강생판: 먼저 로그인 요청을 등록하고 확인 코드를 받는다. 승인 화면에서 이 코드를 입력해야 승인된다
+  // (남이 보낸 인증 주소를 눌러 주는 것만으로는 승인되지 않게). 사내판은 사내 서버 방식 그대로 둔다.
+  if (IS_STUDENT) {
+    let reg;
+    try {
+      const res = await safeFetch(`${base}/api/cli-auth/device`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code_challenge: pkce.challenge, hostname: os.hostname() }),
+      });
+      reg = await res.json().catch(() => null);
+      if (!res.ok || !reg?.request_id || !reg?.user_code) fail(`로그인 요청을 만들지 못했습니다: ${reg?.error ?? res.status}`);
+    } catch (error) {
+      fail(`로그인 요청 실패: ${error.message}`);
+    }
+    process.stdout.write(`\n  확인 코드: ${reg.user_code}\n\n브라우저 승인 화면에 이 확인 코드를 입력하세요. 다른 사람에게 알려 주지 마세요.\n`);
+    if (flags.manual) {
+      const url = `${base}/cli-auth?request=${reg.request_id}`;
+      process.stdout.write(`브라우저에서 다음 주소를 열고 승인한 뒤 나오는 코드를 복사하세요:\n\n  ${url}\n\n`);
+      openBrowser(url);
+      const code = (await promptStdin("코드 붙여넣기: ")).trim();
+      if (!code) fail("코드가 비어 있습니다.");
+      await exchangeCode(base, code, flags, config, pkce.verifier);
+      return;
+    }
+    const state = crypto.randomBytes(16).toString("hex");
+    const code = await loginBrowser(base, state, pkce.challenge, reg.request_id);
+    await exchangeCode(base, code, flags, config, pkce.verifier);
+    return;
+  }
+
   if (flags.manual) {
     const url = `${base}/cli-auth?challenge=${pkce.challenge}`;
     process.stdout.write(`브라우저에서 다음 주소를 열고 윤비서 로그인 후 발급되는 코드를 복사하세요:\n\n  ${url}\n\n`);
@@ -998,8 +1058,8 @@ const HELP = "";
 const STUDENT_HELP = `yb — 윤비서 CLI (수강생판, AI 에이전트 친화)
 
 처음 한 번
-  yb login --url https://내-윤비서-주소      브라우저에서 내 윤비서에 로그인하면 API 키가 발급·저장된다
-  yb login --manual                         브라우저가 자동으로 안 열릴 때: 코드를 복사해 붙여넣는다
+  yb login --url https://내-윤비서-주소      터미널에 확인 코드가 뜨고 브라우저가 열린다. 승인 화면에 그 코드를 입력하면 키가 발급·저장된다(90일)
+  yb login --manual                         브라우저가 자동으로 안 돌아올 때: 승인 후 나온 코드를 복사해 붙여넣는다
   yb auth --url <주소>                       마이페이지 → 내 API 키에서 만든 키로 연결. 실행하면 키를 화면에 안 보이게 붙여넣는다
                                             (키를 명령줄에 쓰면 셸 기록에 남는다. 파이프도 된다: printf '%s' "$키" | yb auth --url <주소>)
   yb whoami                                 이 키의 주인(나) 확인 — 서버에 물어본다. AI 에이전트는 yb login 대신 이걸 쓴다
@@ -1206,7 +1266,7 @@ function taskLine(task, today, { showAssignee = false } = {}) {
 }
 
 function taskUrl(task) {
-  const base = requireBase(process.env.YB_BASE_URL || loadConfig().base_url || DEFAULT_URL);
+  const base = resolveBase(loadConfig());
   return `${base}/dashboard/tasks/${task.id}`;
 }
 

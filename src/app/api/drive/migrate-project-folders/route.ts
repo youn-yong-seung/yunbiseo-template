@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createFolder, moveFile } from "@/lib/google-drive";
+import { assertInsideAllowedRoots, createFolder, moveFile } from "@/lib/google-drive";
 import { logInfo } from "@/lib/logger";
 import { requireRouteAdmin } from "@/lib/route-auth";
 import { createClient } from "@/lib/supabase/server";
@@ -97,12 +97,15 @@ export async function POST() {
           continue;
         }
 
-        // 3d. 루트 폴더에서 유형 폴더로 이동
+        // 3d. 옮기기 전에 범위 확인: 프로젝트 폴더·유형 폴더가 윤비서 최상위 폴더 안인지(최상위 자체는 옮기지 않는다)
+        await assertInsideAllowedRoots([project.drive_folder_id], undefined, undefined, { allowRoot: false });
+        await assertInsideAllowedRoots([targetType.drive_folder_id]);
+        // 3e. 루트 폴더에서 유형 폴더로 이동
         await moveFile(project.drive_folder_id, rootFolderId, targetType.drive_folder_id);
         results.folderMoved++;
       } catch (err) {
         results.errors.push(
-          `${project.project_number}: ${err instanceof Error ? err.message : String(err)}`
+          `${project.project_number}: ${err instanceof Error && /[가-힣]/.test(err.message) ? err.message : "이동하지 못했습니다"}`
         );
       }
     }
