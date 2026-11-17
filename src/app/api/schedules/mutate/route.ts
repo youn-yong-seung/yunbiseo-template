@@ -10,7 +10,7 @@ import {
 import { getGoogleOAuthToken } from "@/lib/google-token";
 import { createRouteAuthErrorResponse, forbiddenResponse, requireRouteUser } from "@/lib/route-auth";
 import { isPublicErrorMessage } from "@/lib/safe-error";
-import { canEditSchedule } from "@/lib/schedule-access";
+import { canEditAllSchedules, canEditSchedule } from "@/lib/schedule-access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { toKstDateString } from "@/lib/date";
 
@@ -84,9 +84,11 @@ function buildMutableScheduleFields(
     project_id: schedule.project_id ?? null,
     customer_id: schedule.customer_id ?? null,
     lead_id: schedule.lead_id ?? null,
-    recurrence_type: overrides?.recurrence_type ?? schedule.recurrence_type ?? "none",
-    recurrence_end_date: overrides?.recurrence_end_date ?? schedule.recurrence_end_date ?? null,
-    recurrence_group_id: overrides?.recurrence_group_id ?? schedule.recurrence_group_id ?? null,
+    // 반복 정보는 요청 본문에서 받지 않는다. 묶음 id 는 서버가 만들거나 기존 값을 쓴다
+    // (남의 묶음 id 를 넣어 묶음 전체 수정·삭제로 남의 일정을 건드리던 문제).
+    recurrence_type: overrides?.recurrence_type ?? "none",
+    recurrence_end_date: overrides?.recurrence_end_date ?? null,
+    recurrence_group_id: overrides?.recurrence_group_id ?? null,
     sync_source: "local" as const,
   };
 }
@@ -407,6 +409,9 @@ export async function POST(request: NextRequest) {
       const targetRows = requestedScope === "all" || earlierRows.length === 0
         ? seriesRows
         : seriesRows.filter((row) => new Date(row.start_at).getTime() >= existingStartMs);
+      if (!(await canEditAllSchedules(seriesRows.map((row) => row.id), employee))) {
+        return forbiddenResponse("반복 일정 묶음에 다른 사람이 만든 일정이 있어 한꺼번에 고칠 수 없습니다.");
+      }
       const nextGroupId = requestedScope === "following" && earlierRows.length > 0
         ? crypto.randomUUID()
         : String(normalizedExisting.recurrence_group_id);
@@ -541,6 +546,9 @@ export async function POST(request: NextRequest) {
       const targetRows = requestedScope === "all" || earlierRows.length === 0
         ? seriesRows
         : seriesRows.filter((row) => new Date(row.start_at).getTime() >= existingStartMs);
+      if (!(await canEditAllSchedules(seriesRows.map((row) => row.id), employee))) {
+        return forbiddenResponse("반복 일정 묶음에 다른 사람이 만든 일정이 있어 한꺼번에 지울 수 없습니다.");
+      }
       const earlierRecurrenceEndDate = getSeriesEndDate(earlierRows.map((row) => row.start_at));
 
       let warning = !calendar && googleAuthWarning && targetRows.some((row) => row.google_event_id)
