@@ -1054,7 +1054,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="bolta_webhook_secret">Webhook Secret</Label>
+                <Label htmlFor="bolta_webhook_secret">Webhook 서명키 (whsec_…)</Label>
                 <Input
                   id="bolta_webhook_secret"
                   value={boltaSettings.webhook_secret}
@@ -1084,12 +1084,10 @@ export default function SettingsPage() {
             </div>
 
             <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              웹훅 URL은{" "}
-              <span className="font-mono">/api/bolta/webhook</span>{" "}
-              이고, 요청 헤더{" "}
-              <span className="font-mono">x-bolta-webhook-secret</span> 에 위 Webhook Secret 을 넣도록 Bolta 에 등록합니다.
-              주소에 secret 을 붙이는 방식(?secret=)은 보안상 받지 않습니다. 헤더를 넣을 수 없으면 웹훅 없이 매출 화면의
-              &apos;상태 다시 확인&apos;(yb revenue tax-invoice sync)을 씁니다.
+              웹훅 URL은 <span className="font-mono">https://내-윤비서-주소/api/bolta/webhook</span> 으로
+              볼타 개발자센터 &gt; 연동 &gt; 웹훅 에 등록합니다(테스트·라이브 각각). 위 Webhook 서명키 칸에는
+              <b> 볼타 개발자센터 &gt; 연동 &gt; 웹훅 &gt; 설정</b> 에서 &apos;서명키 교체&apos;로 받은 서명키(whsec_…)를 넣습니다.
+              윤비서는 이 서명키로 볼타가 보낸 요청인지 확인하고, 서명이 맞지 않는 요청은 받지 않습니다.
             </div>
 
             <div className="flex justify-end">

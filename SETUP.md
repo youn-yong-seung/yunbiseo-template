@@ -281,6 +281,11 @@ npm run dev
 | **Gmail/Google 캘린더** | 메일·캘린더 연동 | Google OAuth 클라이언트 | `.env.local`(`GOOGLE_OAUTH_*`) |
 | **Vercel 배포 + Cron** | 인터넷 배포 · Slack 일정 알림/반복매입 자동생성 | Vercel + `CRON_SECRET` | `vercel` CLI / 대시보드 |
 
+**볼타 웹훅(발행 결과 자동 반영, 선택):** 볼타 개발자센터 > 연동 > 웹훅 에 `https://내-윤비서-주소/api/bolta/webhook` 을 등록하고(테스트·라이브 각각),
+같은 화면의 **설정** 탭에서 '서명키 교체'로 받은 서명키(`whsec_…`, 한 번만 보임)를 윤비서 **시스템 설정 → Bolta 연동 설정 → Webhook 서명키** 칸
+(또는 `.env.local` 의 `BOLTA_WEBHOOK_SECRET`)에 넣습니다. 서명키가 없으면 웹훅을 받지 않고, 서명이 맞지 않는 요청은 거부합니다.
+웹훅이 없어도 매출 화면의 '상태 다시 확인'(`yb revenue tax-invoice sync`)으로 발행 결과를 가져올 수 있습니다.
+
 **볼타를 연결하지 않아도 매출 관리는 그대로 됩니다.** 세금계산서는 홈택스에서 직접 발행한 뒤, 매출 수정 화면에서 '세금계산서 발행완료'를 체크하거나
 `yb revenue update <매출id> --tax-invoice true --tax-invoice-date 2026-11-17` 로 표시하면 됩니다. 볼타 없이 자동 발행 버튼을 누르면
 "볼타 API 키가 없어 자동 발행을 쓸 수 없습니다" 라고 안내만 하고 아무것도 바뀌지 않습니다.

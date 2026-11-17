@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "crypto";
 import { publicErrorMessage } from "@/lib/safe-error";
 
 import { NextRequest, NextResponse } from "next/server";
@@ -7,11 +6,9 @@ import { getBoltaTaxInvoice, getBoltaWebhookSecret } from "@/lib/bolta";
 import { logError, logInfo } from "@/lib/logger";
 import { sendTaxInvoiceIssuedSlackNotification } from "@/lib/slack";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { verifyStandardWebhook } from "@/lib/standard-webhooks";
+import { appUrl } from "@/lib/app-url";
 
-function safeCompare(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
-}
 
 type BoltaWebhookPayload = {
   eventType?: string;
@@ -25,27 +22,77 @@ type BoltaWebhookPayload = {
   };
 };
 
-// 비밀은 헤더(x-bolta-webhook-secret)로만 받는다. 주소(?secret=)에 실린 값은 서버 로그·프록시 기록에 남아 받지 않는다.
-function getWebhookSecret(request: NextRequest) {
-  if (request.nextUrl.searchParams.has("secret")) return null;
-  return request.headers.get("x-bolta-webhook-secret");
-}
-
+/**
+ * 볼타 웹훅. 볼타 문서(https://docs.bolta.io/docs/api-introduction/webhook-events)대로
+ * Standard Webhooks 서명(webhook-id·webhook-timestamp·webhook-signature, HMAC-SHA256)을 확인한다.
+ *
+ * - 서명키: 볼타 개발자센터 > 연동 > 웹훅 > 설정의 서명키(whsec_…). 시스템 설정 화면 또는 BOLTA_WEBHOOK_SECRET.
+ * - 서명키가 없으면 503(아무 요청도 받지 않음), 서명·시각이 맞지 않으면 400.
+ * - 같은 webhook-id 는 한 번만 처리한다(재전송 방지). 두 번째부터는 처리 없이 200.
+ */
 export async function POST(request: NextRequest) {
   const configuredSecret = await getBoltaWebhookSecret();
   if (!configuredSecret) {
     return NextResponse.json(
-      { error: "Bolta webhook secret is not configured" },
+      { error: "Bolta webhook signing secret is not configured" },
       { status: 503 }
     );
   }
 
-  const incomingSecret = getWebhookSecret(request);
-  if (!incomingSecret || !safeCompare(incomingSecret, configuredSecret)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // 서명은 가공 전 원문 본문으로 확인해야 한다(JSON 으로 읽은 뒤 다시 만들면 달라진다).
+  const rawBody = await request.text();
+  const verified = verifyStandardWebhook(
+    configuredSecret,
+    {
+      id: request.headers.get("webhook-id"),
+      timestamp: request.headers.get("webhook-timestamp"),
+      signature: request.headers.get("webhook-signature"),
+    },
+    rawBody,
+  );
+  if (!verified.ok) {
+    if (verified.reason === "bad_secret") {
+      logError("ERROR_BOLTA_WEBHOOK_SECRET", "볼타 웹훅 서명키 형식이 올바르지 않습니다(whsec_ 로 시작하는 값).");
+      return NextResponse.json({ error: "Bolta webhook signing secret is invalid" }, { status: 503 });
+    }
+    return NextResponse.json({ error: "invalid_signature", reason: verified.reason }, { status: 400 });
   }
 
-  const payload = (await request.json()) as BoltaWebhookPayload;
+  const admin = createAdminClient();
+
+  // 재전송 방지: 같은 webhook-id 는 한 번만 처리한다.
+  await admin.from("webhook_deliveries").delete().lt("received_at", new Date(Date.now() - 86400_000).toISOString());
+  const { error: deliveryError } = await admin
+    .from("webhook_deliveries")
+    .insert({ source: "bolta", webhook_id: verified.id });
+  if (deliveryError) {
+    if (deliveryError.code === "23505") {
+      return NextResponse.json({ success: true, duplicate: true });
+    }
+    logError("ERROR_BOLTA_WEBHOOK_DELIVERY", "볼타 웹훅 수신 기록 실패", { details: { message: deliveryError.message } });
+    return NextResponse.json({ error: "웹훅을 기록하지 못했습니다." }, { status: 500 });
+  }
+
+  let payload: BoltaWebhookPayload;
+  try {
+    payload = JSON.parse(rawBody) as BoltaWebhookPayload;
+  } catch {
+    return NextResponse.json({ error: "invalid_json" }, { status: 400 });
+  }
+
+  const response = await handleBoltaEvent(request, admin, payload);
+  // 처리하지 못했으면 기록을 지워, 볼타가 같은 webhook-id 로 다시 보낼 때 다시 처리되게 한다.
+  if (response.status >= 400) {
+    await admin.from("webhook_deliveries").delete().eq("source", "bolta").eq("webhook_id", verified.id);
+  }
+  return response;
+}
+
+async function handleBoltaEvent(
+  request: NextRequest,
+  admin: ReturnType<typeof createAdminClient>,
+  payload: BoltaWebhookPayload,
+) {
   const eventType = payload.eventType ?? "";
   const issuanceKey = payload.data?.issuanceKey?.trim();
 
@@ -56,7 +103,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const admin = createAdminClient();
   const now = new Date().toISOString();
 
   const { data: revenue, error: revenueError } = await admin
@@ -151,10 +197,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const revenueUrl = new URL(
-      `/dashboard/revenues/${revenue.id}`,
-      request.nextUrl.origin
-    ).toString();
+    const revenueUrl = appUrl(request, `/dashboard/revenues/${revenue.id}`);
 
     try {
       await sendTaxInvoiceIssuedSlackNotification({
