@@ -15,9 +15,9 @@ import {
   getRevenueTaxInvoiceState,
   isRevenueTaxInvoiceIssuingStale,
 } from "@/lib/revenue-tax-invoice";
-import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
+import { requireRouteUserOrApiKey } from "@/lib/route-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getSystemSetting } from "@/lib/system-settings";
+import { getSystemSettingWithEnvFallback } from "@/lib/system-settings";
 import {
   getTaxInvoicePreviewMissingFields,
   mergeTaxInvoicePreview,
@@ -286,7 +286,7 @@ async function resolveSupplierContact() {
   return {
     name: managerName,
     email:
-      asTrimmed(await getSystemSetting("bolta_supplier_manager_email")) ??
+      asTrimmed(await getSystemSettingWithEnvFallback("bolta_supplier_manager_email", "BOLTA_SUPPLIER_MANAGER_EMAIL")) ??
         asTrimmed(employee?.email),
     phone:
       asTrimmed(employee?.phone) ??
@@ -547,15 +547,15 @@ async function prepareIssuePreview(
   }
 
   if (
-    !(await getSystemSetting("bolta_api_key"))
+    !(await getSystemSettingWithEnvFallback("bolta_api_key", "BOLTA_API_KEY"))
   ) {
-    structuralBlockedReasons.push("Bolta API 키가 설정되어 있지 않습니다.");
+    structuralBlockedReasons.push("볼타 API 키가 없어 자동 발행을 쓸 수 없습니다. 시스템 설정에서 볼타를 연결하거나, 홈택스에서 직접 발행한 뒤 매출 수정에서 '세금계산서 발행완료'를 체크하세요.");
   }
 
   if (
-    !(await getSystemSetting("bolta_customer_key"))
+    !(await getSystemSettingWithEnvFallback("bolta_customer_key", "BOLTA_CUSTOMER_KEY"))
   ) {
-    structuralBlockedReasons.push("Bolta Customer Key가 설정되어 있지 않습니다.");
+    structuralBlockedReasons.push("볼타 Customer Key가 없어 자동 발행을 쓸 수 없습니다.");
   }
 
   return {
@@ -565,11 +565,9 @@ async function prepareIssuePreview(
   };
 }
 
-export async function GET(_request: Request, context: RouteContext) {
-  const { user, authUnavailable } = await requireRouteUser();
-  if (!user) {
-    return createRouteAuthErrorResponse(authUnavailable);
-  }
+export async function GET(request: Request, context: RouteContext) {
+  const auth = await requireRouteUserOrApiKey(request);
+  if (!auth.ok) return auth.response;
 
   try {
     const { id } = await context.params;
@@ -605,10 +603,9 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const { user, authUnavailable } = await requireRouteUser();
-  if (!user) {
-    return createRouteAuthErrorResponse(authUnavailable);
-  }
+  const auth = await requireRouteUserOrApiKey(request);
+  if (!auth.ok) return auth.response;
+  const actorId = auth.actorId ?? undefined;
 
   const { id } = await context.params;
   const admin = createAdminClient();
@@ -647,7 +644,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         {
           resource: "revenue",
           resource_id: revenue.id,
-          actor_id: user.id,
+          actor_id: actorId,
           details: {
             resolved: result.resolved,
             issuance_key: revenue.tax_invoice_issuance_key,
@@ -709,7 +706,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     logError("FORCE_CANCEL_REVENUE_TAX_INVOICE", `세금계산서 발행 강제 취소: ${revenue.title}`, {
       resource: "revenue",
       resource_id: revenue.id,
-      actor_id: user.id,
+      actor_id: actorId,
       details: {
         issuance_key: revenue.tax_invoice_issuance_key,
         client_reference_id: revenue.tax_invoice_client_reference_id,
@@ -731,7 +728,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     logError("ERROR_REVENUE_TAX_INVOICE_PATCH", `세금계산서 상태 복구 API 오류: ${id}`, {
       resource: "revenue",
       resource_id: id,
-      actor_id: user.id,
+      actor_id: actorId,
       details: {
         message,
       },
@@ -742,10 +739,9 @@ export async function PATCH(request: Request, context: RouteContext) {
 }
 
 export async function POST(request: Request, context: RouteContext) {
-  const { user, authUnavailable } = await requireRouteUser();
-  if (!user) {
-    return createRouteAuthErrorResponse(authUnavailable);
-  }
+  const auth = await requireRouteUserOrApiKey(request);
+  if (!auth.ok) return auth.response;
+  const actorId = auth.actorId ?? undefined;
 
   const { id } = await context.params;
   const admin = createAdminClient();
@@ -862,7 +858,7 @@ export async function POST(request: Request, context: RouteContext) {
       logInfo("ISSUE_REVENUE_TAX_INVOICE", `세금계산서 발행 요청: ${revenue.title}`, {
         resource: "revenue",
         resource_id: revenue.id,
-        actor_id: user.id,
+        actor_id: actorId,
         details: {
           client_reference_id: clientReferenceId,
           issuance_key: issueResponse.issuanceKey,
@@ -903,7 +899,7 @@ export async function POST(request: Request, context: RouteContext) {
             {
               resource: "revenue",
               resource_id: revenue.id,
-              actor_id: user.id,
+              actor_id: actorId,
               details: {
                 client_reference_id: clientReferenceId,
                 issuance_key: issueStatus.issuanceKey,
@@ -945,7 +941,7 @@ export async function POST(request: Request, context: RouteContext) {
       logError("FAIL_REVENUE_TAX_INVOICE", `세금계산서 발행 요청 실패: ${revenue.title}`, {
         resource: "revenue",
         resource_id: revenue.id,
-        actor_id: user.id,
+        actor_id: actorId,
         details: {
           client_reference_id: clientReferenceId,
           code: errorCode,
@@ -965,7 +961,7 @@ export async function POST(request: Request, context: RouteContext) {
     logError("ERROR_REVENUE_TAX_INVOICE", `세금계산서 발행 API 오류: ${id}`, {
       resource: "revenue",
       resource_id: id,
-      actor_id: user.id,
+      actor_id: actorId,
       details: {
         message,
       },

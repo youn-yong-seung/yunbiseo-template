@@ -1,4 +1,4 @@
-import { getSystemSetting } from "@/lib/system-settings";
+import { getSystemSettingWithEnvFallback } from "@/lib/system-settings";
 
 const BOLTA_BASE_URL = process.env.BOLTA_BASE_URL || "https://xapi.bolta.io";
 
@@ -80,7 +80,7 @@ export class BoltaApiError extends Error {
 }
 
 async function getBoltaApiKey() {
-  const value = await getSystemSetting("bolta_api_key");
+  const value = await getSystemSettingWithEnvFallback("bolta_api_key", "BOLTA_API_KEY");
   if (!value) {
     throw new Error("Bolta API 키가 설정되지 않았습니다.");
   }
@@ -92,7 +92,7 @@ function getBasicAuthHeader(apiKey: string) {
 }
 
 export async function getBoltaCustomerKey() {
-  const value = await getSystemSetting("bolta_customer_key");
+  const value = await getSystemSettingWithEnvFallback("bolta_customer_key", "BOLTA_CUSTOMER_KEY");
   if (!value) {
     throw new Error("Bolta Customer Key가 설정되지 않았습니다.");
   }
@@ -100,7 +100,7 @@ export async function getBoltaCustomerKey() {
 }
 
 export async function getBoltaWebhookSecret() {
-  return getSystemSetting("bolta_webhook_secret");
+  return getSystemSettingWithEnvFallback("bolta_webhook_secret", "BOLTA_WEBHOOK_SECRET");
 }
 
 async function parseBoltaResponse<T>(response: Response): Promise<T> {

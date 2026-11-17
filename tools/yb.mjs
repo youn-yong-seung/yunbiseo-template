@@ -40,7 +40,8 @@ const STUDENT_COMMANDS = {
   give: true, given: true, done: true, do: true, due: true,
   expense: ["list", "get", "create", "update"],
   deposit: ["list", "get", "create", "update", "delete"],
-  revenue: ["create"],
+  revenue: ["list", "get", "create", "update", "tax-invoice"],
+  card: ["list", "get", "create", "update", "delete"],
   meeting: ["create"],
 };
 
@@ -929,7 +930,6 @@ const STUDENT_HELP = `yb — 윤비서 CLI (수강생판, AI 에이전트 친화
   yb expense update <id> [--title] [--total] [--memo]
   yb deposit list|get|create|update|delete
       create --date YYYY-MM-DD --amount 금액 --depositor 입금자 [--bank] [--account]
-  yb revenue create --title 제목 --total 총액 [--date YYYY-MM-DD]
   yb meeting create --transcript 전사록 [--title 제목]
   yb api GET|POST|PATCH|DELETE /api/경로 [--q '{"key":"value"}'] [--json '{...}']
 
@@ -959,7 +959,23 @@ const STUDENT_HELP = `yb — 윤비서 CLI (수강생판, AI 에이전트 친화
   yb task get|update|delete <번호>
   yb task create --title 제목 [--due YYYY-MM-DD] [--priority 높음|보통|낮음] [--assignee 이름] [--project 프로젝트id]
 
-세금계산서·법인카드 명령은 템플릿 업데이트와 함께 열린다.
+매출·세금계산서
+  yb revenue list [--q 검색어] [--project 26-3] [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--paid true|false] [--tax-invoice false] [--limit N]
+  yb revenue get <매출id>
+  yb revenue create --title 제목 --total 총액(부가세 포함) [--project 26-3] [--date YYYY-MM-DD] [--memo]
+  yb revenue update <매출id> [--title] [--total] [--project] [--date] [--paid true --paid-date YYYY-MM-DD] [--memo]
+  yb revenue update <매출id> --tax-invoice true [--tax-invoice-date YYYY-MM-DD]
+      · 볼타 연결이 없을 때: 홈택스에서 직접 발행한 뒤 '발행함'으로만 표시한다
+  yb revenue tax-invoice status <매출id>      발행 미리보기와 못 하는 이유(볼타 미연결, 고객 사업자번호 없음 등)
+  yb revenue tax-invoice issue <매출id> --yes  볼타로 국세청 발행. 외부 발행이라 사람이 미리보기를 확인한 뒤에만 --yes
+  yb revenue tax-invoice sync <매출id>        발행중으로 멈춘 건 상태 다시 확인
+
+법인카드 (카드 문자 연동 방법은 SETUP.md '법인카드 문자 연동')
+  yb card list [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--last4 1234] [--missing-description true] [--status pending|confirmed|ignored] [--q 검색어]
+  yb card get <id>
+  yb card update <id> --description "고객 미팅 커피 3잔" [--status confirmed|ignored]   적요 적기
+  yb card create --amount 금액 --merchant 가맹점 [--approved-at YYYY-MM-DD] [--last4 1234] [--description]   문자로 안 들어온 건 손으로 넣기
+  yb card delete <id>
 `;
 
 const UPDATE_HELP = {
@@ -1610,7 +1626,9 @@ async function main() {
         return;
       }
       if (sub === "list") {
-        printJson(await request("GET", "/api/revenues", { query: listQuery(flags) }));
+        const query = listQuery(flags);
+        if (flags["tax-invoice"] !== undefined) query.tax_invoice = flags["tax-invoice"];
+        printJson(await request("GET", "/api/revenues", { query }));
       } else if (sub === "get") {
         if (!id) fail("사용법: yb revenue get <id>");
         printJson(await request("GET", `/api/revenues/${id}`));
