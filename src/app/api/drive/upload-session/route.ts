@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { createResumableUploadSession } from "@/lib/google-drive";
+import { createResumableUploadSession, DriveAccessError, assertInsideAllowedRoots } from "@/lib/google-drive";
 import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
 
 export async function POST(request: NextRequest) {
@@ -19,6 +19,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    await assertInsideAllowedRoots([folderId]);
     const uploadUrl = await createResumableUploadSession(
       folderId,
       fileName,
@@ -28,6 +29,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ uploadUrl });
   } catch (error) {
+    if (error instanceof DriveAccessError) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
     console.error("Upload session error:", error);
     return NextResponse.json(
       { error: "업로드 세션 생성 실패" },

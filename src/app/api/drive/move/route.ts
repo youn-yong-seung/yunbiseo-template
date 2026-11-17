@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { moveFile } from "@/lib/google-drive";
+import { moveFile, DriveAccessError, assertInsideAllowedRoots } from "@/lib/google-drive";
 import { logInfo } from "@/lib/logger";
 import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
 
@@ -18,6 +18,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!Array.isArray(fileIds) || fileIds.length > 100) {
+      return NextResponse.json({ error: "fileIds 는 100개 이하 배열이어야 합니다" }, { status: 400 });
+    }
+    await assertInsideAllowedRoots([...fileIds, fromFolderId, toFolderId]);
     const results = [];
     for (const fileId of fileIds) {
       const result = await moveFile(fileId, fromFolderId, toFolderId);
@@ -31,6 +35,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, moved: results.length });
   } catch (error) {
+    if (error instanceof DriveAccessError) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
     console.error("Move files error:", error);
     return NextResponse.json(
       { error: "파일 이동 실패" },
