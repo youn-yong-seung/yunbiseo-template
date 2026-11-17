@@ -7,7 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 /**
  * API 키 목록·발급 (로그인 세션 전용).
  * - 일반 직원: 자기 키만 본다.
- * - 관리자: 모든 직원의 키를 본다(폐기용). 키 값 보기는 자기 키만 된다(/reveal).
+ * - 관리자: 모든 직원의 키를 본다(폐기용). 키 원문은 누구도 다시 볼 수 없다(발급할 때 한 번만 보여 준다).
  * - 새 키는 항상 로그인한 본인 키로 만든다. 다른 직원 명의로 만들 수 없다.
  */
 export async function GET(request: NextRequest) {
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const admin = createAdminClient();
     let query = admin
       .from("api_keys")
-      .select("id, name, key_prefix, created_by, employee_id, last_used_at, is_active, created_at, updated_at, key_encrypted")
+      .select("id, name, key_prefix, created_by, employee_id, last_used_at, is_active, created_at, updated_at")
       .eq("is_active", true)
       .order("created_at", { ascending: false });
     // 관리자도 마이페이지(scope=mine)에서는 자기 키만 본다.
@@ -34,10 +34,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "API 키 목록을 불러오지 못했습니다." }, { status: 500 });
     }
 
-    const result = (data ?? []).map(({ key_encrypted, ...apiKey }) => ({
+    // 키 원문은 저장하지 않으므로 다시 보여 줄 수 없다(can_reveal 은 화면 호환용으로 항상 false).
+    const result = (data ?? []).map((apiKey) => ({
       ...apiKey,
       is_mine: apiKey.employee_id === employee.id,
-      can_reveal: Boolean(key_encrypted) && apiKey.employee_id === employee.id,
+      can_reveal: false,
     }));
 
     return NextResponse.json({ data: result });

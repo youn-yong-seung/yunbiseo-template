@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { generateApiKey, getKeyPrefix, hashApiKey } from "@/lib/api-key";
-import { encryptApiKey } from "@/lib/api-key-secret";
 
 export interface IssuedApiKey {
   id: string;
@@ -18,6 +17,7 @@ export interface IssuedApiKey {
  * API 키를 생성해 api_keys 에 저장하고 원문을 1회 반환한다.
  * 웹 UI(POST /api/api-keys)와 yb login(cli-auth/exchange)이 공통으로 사용한다.
  * 키 주인은 employee_id 로 묶는다. created_by(이름)는 표시용이다.
+ * DB 에는 sha256 해시와 앞 12자(key_prefix)만 저장한다. 원문은 되살릴 수 없으므로, 잃어버리면 지우고 새로 만든다.
  * supabase 는 service role 클라이언트여야 한다(api_keys 는 브라우저 정책이 없다).
  */
 export async function issueApiKey(
@@ -27,7 +27,6 @@ export async function issueApiKey(
   const rawKey = generateApiKey();
   const keyHash = hashApiKey(rawKey);
   const keyPrefix = getKeyPrefix(rawKey);
-  const keyEncrypted = encryptApiKey(rawKey);
 
   const { data, error } = await supabase
     .from("api_keys")
@@ -35,7 +34,6 @@ export async function issueApiKey(
       name: name.slice(0, 100),
       key_hash: keyHash,
       key_prefix: keyPrefix,
-      key_encrypted: keyEncrypted,
       created_by: employeeName,
       employee_id: employeeId,
     })

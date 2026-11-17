@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, CalendarRange, Check, Copy, Eye, EyeOff, FolderKanban, KeyRound, MessageSquare, Receipt, Sparkles } from "lucide-react";
+import { Bot, CalendarRange, FolderKanban, KeyRound, MessageSquare, Receipt, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -261,9 +261,6 @@ export default function SettingsPage() {
   const [resultOpen, setResultOpen] = useState(false);
   const [generatedKey, setGeneratedKey] = useState("");
   const [copied, setCopied] = useState(false);
-  const [revealedApiKeys, setRevealedApiKeys] = useState<Record<string, string>>({});
-  const [revealingApiKeyId, setRevealingApiKeyId] = useState<string | null>(null);
-  const [copiedApiKeyId, setCopiedApiKeyId] = useState<string | null>(null);
 
   // 프로젝트 유형
   const [projectTypes, setProjectTypes] = useState<ProjectType[]>([]);
@@ -843,86 +840,11 @@ export default function SettingsPage() {
     try {
       const res = await fetch(`/api/api-keys/${id}`, { method: "DELETE" });
       if (res.ok) {
-        setRevealedApiKeys((prev) => {
-          const next = { ...prev };
-          delete next[id];
-          return next;
-        });
-        setCopiedApiKeyId((prev) => (prev === id ? null : prev));
         await fetchApiKeys();
       }
     } catch (e) {
       console.error("API Key 삭제 실패:", e instanceof Error ? e.message : String(e));
       toast.error("API Key 삭제에 실패했습니다. 잠시 후 다시 시도해주세요.");
-    }
-  };
-
-  const fetchRawApiKey = useCallback(async (id: string) => {
-    const res = await fetch(`/api/api-keys/${id}/reveal`, { cache: "no-store" });
-    const json = await res.json().catch(() => null);
-
-    if (!res.ok) {
-      throw new Error(json?.error ?? "API Key를 불러오지 못했습니다.");
-    }
-
-    const rawKey =
-      typeof json?.data?.raw_key === "string" ? json.data.raw_key.trim() : "";
-
-    if (!rawKey) {
-      throw new Error("API Key 값이 비어 있습니다.");
-    }
-
-    setRevealedApiKeys((prev) => ({ ...prev, [id]: rawKey }));
-    return rawKey;
-  }, []);
-
-  const handleToggleApiKeyVisibility = async (apiKey: ApiKey) => {
-    if (revealedApiKeys[apiKey.id]) {
-      setRevealedApiKeys((prev) => {
-        const next = { ...prev };
-        delete next[apiKey.id];
-        return next;
-      });
-      return;
-    }
-
-    if (!apiKey.can_reveal) {
-      toast.error("이 API Key는 전체 값을 다시 볼 수 없습니다. 새로 생성해주세요.");
-      return;
-    }
-
-    setRevealingApiKeyId(apiKey.id);
-
-    try {
-      await fetchRawApiKey(apiKey.id);
-    } catch (e) {
-      console.error("API Key 조회 실패:", e instanceof Error ? e.message : String(e));
-      toast.error("API Key를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
-    } finally {
-      setRevealingApiKeyId((prev) => (prev === apiKey.id ? null : prev));
-    }
-  };
-
-  const handleCopyApiKey = async (apiKey: ApiKey) => {
-    try {
-      const rawKey =
-        revealedApiKeys[apiKey.id] ??
-        (apiKey.can_reveal ? await fetchRawApiKey(apiKey.id) : "");
-
-      if (!rawKey) {
-        toast.error("이 API Key는 전체 값을 다시 복사할 수 없습니다. 새로 생성해주세요.");
-        return;
-      }
-
-      await navigator.clipboard.writeText(rawKey);
-      setCopiedApiKeyId(apiKey.id);
-      setTimeout(() => {
-        setCopiedApiKeyId((prev) => (prev === apiKey.id ? null : prev));
-      }, 2000);
-      toast.success("API Key를 복사했습니다.");
-    } catch (e) {
-      console.error("API Key 복사 실패:", e instanceof Error ? e.message : String(e));
-      toast.error("API Key 복사에 실패했습니다. 잠시 후 다시 시도해주세요.");
     }
   };
 
@@ -964,10 +886,6 @@ export default function SettingsPage() {
     return value.toLocaleString();
   };
 
-  const hasLegacyApiKeys = useMemo(
-    () => apiKeys.some((apiKey) => !apiKey.can_reveal),
-    [apiKeys]
-  );
 
   return (
     <PageShell>
@@ -987,9 +905,9 @@ export default function SettingsPage() {
         <StatCard
           label="API 키"
           value={apiKeys.length}
-          description={hasLegacyApiKeys ? "일부 키는 재조회가 제한됩니다." : "외부 연동용 키를 관리합니다."}
+          description="외부 연동용 키를 관리합니다. 키 값은 만들 때 한 번만 보입니다."
           icon={KeyRound}
-          tone={hasLegacyApiKeys ? "warning" : "info"}
+          tone="info"
         />
         <StatCard
           label="프로젝트 유형"
@@ -1296,11 +1214,7 @@ export default function SettingsPage() {
       >
         <SectionCard className="gap-4">
 
-        {hasLegacyApiKeys ? (
-          <div className="rounded-[1.25rem] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            이전 방식으로 생성된 API Key는 전체 값을 다시 볼 수 없습니다. eye/copy 기능이 필요하면 새로 생성해주세요.
-          </div>
-        ) : null}
+
 
         {loading ? (
           <div className="flex h-40 items-center justify-center">
@@ -1323,34 +1237,8 @@ export default function SettingsPage() {
                       <p className="font-medium">{apiKey.name}</p>
                       <div className="mt-1 flex items-center gap-1">
                         <p className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
-                          {revealedApiKeys[apiKey.id] ?? apiKey.key_prefix}
+                          {apiKey.key_prefix}
                         </p>
-                        <Button
-                          size="icon-xs"
-                          variant="ghost"
-                          onClick={() => void handleToggleApiKeyVisibility(apiKey)}
-                          disabled={
-                            revealingApiKeyId === apiKey.id ||
-                            (!apiKey.can_reveal && !revealedApiKeys[apiKey.id])
-                          }
-                          aria-label={
-                            revealedApiKeys[apiKey.id] ? "API Key 숨기기" : "API Key 보기"
-                          }
-                        >
-                          {revealedApiKeys[apiKey.id] ? <EyeOff /> : <Eye />}
-                        </Button>
-                        <Button
-                          size="icon-xs"
-                          variant="ghost"
-                          onClick={() => void handleCopyApiKey(apiKey)}
-                          disabled={
-                            revealingApiKeyId === apiKey.id ||
-                            (!apiKey.can_reveal && !revealedApiKeys[apiKey.id])
-                          }
-                          aria-label="API Key 복사"
-                        >
-                          {copiedApiKeyId === apiKey.id ? <Check /> : <Copy />}
-                        </Button>
                       </div>
                     </div>
                   </div>
@@ -1393,34 +1281,8 @@ export default function SettingsPage() {
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <span className="min-w-0 flex-1 truncate font-mono text-sm text-muted-foreground">
-                            {revealedApiKeys[apiKey.id] ?? apiKey.key_prefix}
+                            {apiKey.key_prefix}
                           </span>
-                          <Button
-                            size="icon-xs"
-                            variant="ghost"
-                            onClick={() => void handleToggleApiKeyVisibility(apiKey)}
-                            disabled={
-                              revealingApiKeyId === apiKey.id ||
-                              (!apiKey.can_reveal && !revealedApiKeys[apiKey.id])
-                            }
-                            aria-label={
-                              revealedApiKeys[apiKey.id] ? "API Key 숨기기" : "API Key 보기"
-                            }
-                          >
-                            {revealedApiKeys[apiKey.id] ? <EyeOff /> : <Eye />}
-                          </Button>
-                          <Button
-                            size="icon-xs"
-                            variant="ghost"
-                            onClick={() => void handleCopyApiKey(apiKey)}
-                            disabled={
-                              revealingApiKeyId === apiKey.id ||
-                              (!apiKey.can_reveal && !revealedApiKeys[apiKey.id])
-                            }
-                            aria-label="API Key 복사"
-                          >
-                            {copiedApiKeyId === apiKey.id ? <Check /> : <Copy />}
-                          </Button>
                         </div>
                       </TableCell>
                       <TableCell>{apiKey.created_by}</TableCell>
