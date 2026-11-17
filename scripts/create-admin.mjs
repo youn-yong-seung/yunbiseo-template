@@ -2,17 +2,26 @@
 // Supabase Auth 사용자 + employees 테이블 행을 한 번에 생성합니다.
 //
 // 사용법:
-//   npm run setup:admin                  # 기본값: 로그인ID=admin, 비밀번호 자동 생성
-//   npm run setup:admin -- myid mypw      # 로그인ID/비밀번호 직접 지정
+//   npm run setup:admin                  # 기본값: 로그인ID=admin, 비밀번호는 매번 새로 무작위 생성
+//   npm run setup:admin -- myid mypw      # 로그인ID/비밀번호 직접 지정(10자 이상)
 //
 // 실행 후 출력되는 [로그인 ID]와 [비밀번호]로 로그인하세요.
 
+import { randomInt } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 
-// 강의/학습용 기본 관리자 계정 (외우기 쉽게 고정). 로그인 후 마이페이지에서 꼭 변경하세요.
+// 기본 로그인 ID 는 admin. 비밀번호는 모두가 아는 고정값을 쓰지 않고 설치할 때마다 무작위로 만든다
+// (공개 저장소에 적힌 고정 비밀번호로 배포본에 누구나 관리자 로그인하던 문제를 막는다).
 const DEFAULT_LOGIN_ID = "admin";
-const DEFAULT_PASSWORD = "jadong!"; // 6자 이상(Supabase Auth 최소 정책) 충족
+const MIN_PASSWORD_LENGTH = 10;
+
+function generatePassword() {
+  // 헷갈리는 글자(0 O 1 l I)는 뺀다. 예: jadong-k7m2-x9qp
+  const alphabet = "abcdefghjkmnpqrstuvwxyz23456789";
+  const part = () => Array.from({ length: 4 }, () => alphabet[randomInt(alphabet.length)]).join("");
+  return `jadong-${part()}-${part()}`;
+}
 
 // .env.local 을 직접 읽어 환경변수로 로드 (Node 버전 무관)
 function loadEnvFile(path) {
@@ -55,7 +64,11 @@ if (!url || !serviceKey) {
 
 const loginId = (process.argv[2] || process.env.ADMIN_LOGIN_ID || DEFAULT_LOGIN_ID).trim();
 const name = (process.env.ADMIN_NAME || "관리자").trim();
-const password = process.argv[3] || process.env.ADMIN_PASSWORD || DEFAULT_PASSWORD;
+const password = process.argv[3] || process.env.ADMIN_PASSWORD || generatePassword();
+if (password.length < MIN_PASSWORD_LENGTH) {
+  console.error(`\n[오류] 비밀번호는 ${MIN_PASSWORD_LENGTH}자 이상이어야 합니다. 비워 두면 자동으로 만들어 줍니다.\n`);
+  process.exit(1);
+}
 const email = loginId.includes("@") ? loginId : `${loginId}@${domain}`;
 
 const supabase = createClient(url, serviceKey, {
@@ -133,6 +146,8 @@ async function main() {
   console.log("  👤 로그인 ID : " + loginId);
   console.log("  🔒 비밀번호  : " + password);
   console.log("========================================");
+  console.log("\n이 비밀번호는 다시 보여 주지 않습니다. 지금 안전한 곳에 적어 두세요.");
+  console.log("잊어버리면 `npm run setup:admin` 을 다시 실행하면 새 비밀번호로 바뀝니다.");
   console.log("\n이제 `npm run dev` 후 위 정보로 로그인하세요.");
   console.log("👉 로그인 후 왼쪽 사이드바 맨 아래 '내 이름'을 눌러 마이페이지에서 비밀번호를 꼭 변경하세요.\n");
 }
