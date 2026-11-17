@@ -9,7 +9,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * 세션 없음 — 코드 자체가 자격증명이다. 실패는 모두 401 로 통일한다.
  *
  * - 코드는 원자적으로 소비한다(consumed_at IS NULL 이고 만료 전인 행만 갱신). 두 번 쓸 수 없다.
- * - 1단계에서 code_challenge 를 저장했으면 code_verifier 의 sha256(base64url)이 같아야 한다(PKCE).
+ * - code_verifier 의 sha256(base64url)이 1단계에 저장한 code_challenge 와 같아야 한다(PKCE, 필수).
  *   verifier 가 틀려도 코드는 이미 소비돼 다시 쓸 수 없다(가로챈 코드로 재시도 불가).
  * - 발급 시점에 직원이 비활성이거나 지워졌으면 키를 만들지 않는다.
  */
@@ -38,8 +38,9 @@ export async function POST(request: NextRequest) {
 
   if (consumeError || !consumed || !consumed.employee_id) return unauthorized();
 
-  if (consumed.code_challenge) {
-    if (!verifier) return unauthorized();
+  // PKCE 필수: challenge 가 없는 옛 코드도 받지 않는다.
+  {
+    if (!consumed.code_challenge || !verifier) return unauthorized();
     const expected = createHash("sha256").update(verifier).digest("base64url");
     const a = Buffer.from(expected);
     const b = Buffer.from(String(consumed.code_challenge));

@@ -64,8 +64,11 @@ export async function POST(request: NextRequest) {
     }
 
     const logLevel = level === "ERROR" ? "ERROR" : "INFO";
+    const forwarded = request.headers.get("x-forwarded-for")?.split(",").map((v) => v.trim()).filter(Boolean) ?? [];
     const ip =
-      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+      (request.headers.get("x-vercel-forwarded-for") ?? request.headers.get("x-real-ip"))?.split(",")[0]?.trim().slice(0, 64) ??
+      forwarded[forwarded.length - 1]?.slice(0, 64) ??
+      null;
 
     let actorId: string | null = null;
     let actorName: string | null = null;

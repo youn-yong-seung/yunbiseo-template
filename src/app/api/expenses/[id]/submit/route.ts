@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { appUrl } from "@/lib/app-url";
 import { publicErrorMessage } from "@/lib/safe-error";
 
 import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
@@ -7,12 +8,8 @@ import { resolveActorEmployee, submitExpense } from "@/lib/expense-mutations";
 type RouteContext = { params: Promise<{ id: string }> };
 
 function resolveExpenseUrl(request: NextRequest, id: string) {
-  try {
-    const origin = request.headers.get("origin") ?? new URL(request.url).origin;
-    return `${origin}/dashboard/expenses/${id}`;
-  } catch {
-    return null;
-  }
+  // 알림 링크는 서버 설정 주소 기준(Origin 헤더를 믿지 않는다).
+  return appUrl(request, `/dashboard/expenses/${encodeURIComponent(id)}`);
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {

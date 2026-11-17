@@ -1,3 +1,4 @@
+import { appUrl } from "@/lib/app-url";
 import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
 import { publicErrorMessage } from "@/lib/safe-error";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
       taskId,
       prevStatus: prevStatus || null,
       newStatus,
-      taskUrl: asTrimmed(body?.task_url) || null,
+      taskUrl: appUrl(request, `/dashboard/tasks/${encodeURIComponent(taskId)}`),
       actorName,
     });
     return Response.json({ success: true, ...result });

@@ -33,7 +33,8 @@ function CliAuthInner() {
 
   // port 는 선택(1024–65535). port 가 있으면 state(16–128 hex) 필수.
   const validation = useMemo(() => {
-    if (challengeParam !== null && !isValidChallenge(challengeParam)) {
+    // yb 가 만든 PKCE challenge 가 꼭 있어야 한다(옛 yb·직접 연 주소는 안내만 한다).
+    if (!isValidChallenge(challengeParam)) {
       return { ok: false as const };
     }
     if (portParam === null) {
