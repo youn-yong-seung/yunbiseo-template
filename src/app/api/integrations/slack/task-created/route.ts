@@ -1,4 +1,5 @@
 import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
+import { publicErrorMessage } from "@/lib/safe-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSlackConfigured, sendTaskSlackNotification } from "@/lib/slack";
 
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
     return Response.json({ success: true, ...result });
   } catch (error) {
     return Response.json(
-      { error: error instanceof Error ? error.message : "Slack 할일 등록 알림 발송에 실패했습니다." },
+      { error: publicErrorMessage(error, "Slack 할일 등록 알림 발송에 실패했습니다.") },
       { status: 500 }
     );
   }

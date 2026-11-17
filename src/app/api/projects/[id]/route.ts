@@ -10,6 +10,7 @@ import {
   resolveActor,
   resolveProjectRef,
   unauthorized,
+  dbError,
 } from "@/lib/yb-api/refs";
 import { parseProjectStatus, pickProjectFields, selectProject, setProjectStatus, syncProjectAssignees } from "../_shared";
 
@@ -48,13 +49,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     if (Object.keys(fields).length > 0) {
       const { error } = await supabase.from("projects").update(fields).eq("id", id);
-      if (error) throw new BadRequest(error.message);
+      if (error) throw dbError(error);
     }
     if (fields.manager !== undefined) {
       await syncProjectAssignees(supabase, id, fields.manager as string | null);
     }
     if (status) {
-      const actor = await resolveActor(supabase, apiKey.created_by);
+      const actor = await resolveActor(apiKey);
       await setProjectStatus(supabase, id, status, normalizeText(body.status_note), actor?.id ?? null);
     }
 

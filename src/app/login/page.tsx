@@ -41,94 +41,27 @@ function LoginPageInner() {
       return;
     }
 
-    const authDomain = process.env.NEXT_PUBLIC_AUTH_EMAIL_DOMAIN || "example.com";
-    const fallbackEmail = normalizedLoginId.includes("@")
-      ? normalizedLoginId
-      : `${normalizedLoginId}@${authDomain}`;
-
-    let email = fallbackEmail;
-
+    // 비밀번호 확인·실패 횟수 기록은 서버가 한다. 성공하면 서버가 로그인 쿠키를 심는다.
     try {
-      const precheckRes = await fetch("/api/employees/login", {
+      const res = await fetch("/api/employees/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "precheck",
-          login_id: normalizedLoginId,
-        }),
+        body: JSON.stringify({ login_id: normalizedLoginId, password }),
       });
-
-      const precheck = await precheckRes.json();
-      if (!precheckRes.ok) {
-        throw new Error(precheck.error || "Login precheck failed.");
-      }
-
-      if (precheck.allowed === false) {
-        setError(precheck.message || "비활성 계정입니다. 관리자에게 문의해 주세요.");
-        sendLog("LOGIN_BLOCKED", `Blocked login attempt for inactive account: ${normalizedLoginId}`, {
-          level: "ERROR",
-        });
+      const result = await res.json().catch(() => null);
+      if (!res.ok || !result?.success) {
+        setError(result?.error || "로그인 ID 또는 비밀번호가 올바르지 않습니다.");
         setLoading(false);
         return;
       }
-
-      if (typeof precheck.email === "string" && precheck.email) {
-        email = precheck.email;
-      }
     } catch {
-      email = fallbackEmail;
-    }
-
-    const supabase = createClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (signInError) {
-      let message = "로그인 ID 또는 비밀번호가 올바르지 않습니다.";
-
-      try {
-        const failureRes = await fetch("/api/employees/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "failure",
-            login_id: normalizedLoginId,
-            reason: signInError.message,
-          }),
-        });
-
-        const failureData = await failureRes.json();
-        if (failureRes.ok) {
-          if (failureData?.blocked) {
-            message = failureData?.message || "로그인 실패 횟수 초과로 계정이 비활성화되었습니다.";
-          } else if (typeof failureData?.remaining_attempts === "number") {
-            message = `로그인 정보가 올바르지 않습니다. (${failureData.remaining_attempts}회 남음)`;
-          }
-        }
-      } catch {
-        // ignore
-      }
-
-      setError(message);
-      sendLog("LOGIN_FAILED", `Login failed: ${normalizedLoginId}`, { level: "ERROR" });
+      setError("네트워크 오류로 로그인하지 못했습니다. 잠시 후 다시 시도해 주세요.");
       setLoading(false);
       return;
     }
 
-    try {
-      await fetch("/api/employees/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "success",
-          login_id: normalizedLoginId,
-        }),
-      });
-    } catch {
-      // ignore
-    }
+    // 브라우저 Supabase 클라이언트가 서버가 심은 세션을 읽게 한다.
+    await createClient().auth.getSession();
 
     if (rememberMe) {
       localStorage.setItem("rememberMe", "true");

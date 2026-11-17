@@ -8,7 +8,9 @@ import {
   updateGoogleCalendarEvent,
 } from "@/lib/google-calendar";
 import { getGoogleOAuthToken } from "@/lib/google-token";
-import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
+import { createRouteAuthErrorResponse, forbiddenResponse, requireRouteUser } from "@/lib/route-auth";
+import { isPublicErrorMessage } from "@/lib/safe-error";
+import { canEditSchedule } from "@/lib/schedule-access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { toKstDateString } from "@/lib/date";
 
@@ -113,21 +115,6 @@ function generateRecurrenceDates(startDate: Date, type: string, endDateStr: stri
   return dates;
 }
 
-async function getCurrentEmployeeId(authUid: string) {
-  const admin = createAdminClient();
-  const { data: employee } = await admin
-    .from("employees")
-    .select("id")
-    .eq("auth_uid", authUid)
-    .maybeSingle();
-
-  if (!employee?.id) {
-    throw new Error("현재 로그인 사용자와 연결된 직원 정보를 찾지 못했습니다.");
-  }
-
-  return employee.id as string;
-}
-
 async function replaceAttendees(scheduleId: string, attendeeIds: string[]) {
   const admin = createAdminClient();
   const { error: deleteError } = await admin
@@ -169,8 +156,8 @@ async function fetchSeriesRows(groupId: string) {
 }
 
 export async function POST(request: NextRequest) {
-  const { user, authUnavailable } = await requireRouteUser();
-  if (!user) {
+  const { user, employee, authUnavailable } = await requireRouteUser();
+  if (!user || !employee) {
     return createRouteAuthErrorResponse(authUnavailable);
   }
 
@@ -187,7 +174,17 @@ export async function POST(request: NextRequest) {
     const requestedScope = normalizeScheduleMutationScope(body?.scope);
 
     const admin = createAdminClient();
-    const employeeId = await getCurrentEmployeeId(user.id);
+    const employeeId = employee.id;
+
+    if ((action === "update" || action === "delete") && scheduleId) {
+      if (!(await canEditSchedule(scheduleId, employee))) {
+        return forbiddenResponse("이 일정은 만든 사람·참석자·관리자만 고치거나 지울 수 있습니다.");
+      }
+    }
+    // 만든 사람은 로그인한 본인으로 기록한다(관리자만 다른 직원 명의로 만들 수 있다).
+    if (schedule && !employee.isAdmin) {
+      schedule.created_by = employeeId;
+    }
     const token = await getGoogleOAuthToken(admin, user.id);
     const calendarId = getGoogleCalendarId();
     const attendeeEmails = await getAttendeeEmails(attendeeIds);
@@ -627,9 +624,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json(
-      { error: message },
-      { status: 500 }
-    );
+    console.error("[schedules/mutate]", message);
+    // 서버가 만든 안내 문구(잘못된 요청)는 400, 그 밖의 내부 오류는 원문 없이 500.
+    if (isPublicErrorMessage(message)) {
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+    return NextResponse.json({ error: "일정을 처리하지 못했습니다." }, { status: 500 });
   }
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { publicErrorMessage } from "@/lib/safe-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { validateApiKey } from "@/lib/api-key";
 import { logInfo, logError } from "@/lib/logger";
@@ -102,7 +103,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: publicErrorMessage(error) }, { status: 400 });
     }
 
     logInfo("CREATE_DEPOSIT_WEBHOOK", `입금 웹훅 등록: ${depositorName} ${amount}원`, {
@@ -121,7 +122,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, data }, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown server error";
+    const message = publicErrorMessage(error, "서버 오류가 발생했습니다.");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

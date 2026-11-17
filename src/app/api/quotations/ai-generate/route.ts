@@ -1,3 +1,4 @@
+import { getSystemSetting } from "@/lib/system-settings";
 import Anthropic from "@anthropic-ai/sdk";
 import { toKstDateString, addDaysToDateString } from "@/lib/date";
 import { logInfo } from "@/lib/logger";
@@ -41,12 +42,8 @@ export async function POST(request: Request) {
 - 금액은 정수(원 단위)로 작성합니다.`;
 
   // Load model setting (quotation-specific, fallback to chat model)
-  const { data: modelSetting } = await supabase
-    .from("system_settings")
-    .select("value")
-    .eq("key", "quotation_ai_model")
-    .single();
-  const model = modelSetting?.value ?? "claude-sonnet-4-6";
+  // 모델 설정은 관리자 전용 키라 서버(service role)로 읽는다.
+  const model = (await getSystemSetting("quotation_ai_model")) ?? "claude-sonnet-4-6";
 
   const systemPrompt = `${aiPrompt}
 
@@ -144,7 +141,7 @@ export async function POST(request: Request) {
     );
     if (rpcError || !quotationNumber) {
       return Response.json(
-        { error: "견적번호 생성 실패: " + (rpcError?.message ?? "") },
+        { error: "견적번호를 만들지 못했습니다." },
         { status: 500 }
       );
     }
@@ -206,7 +203,7 @@ export async function POST(request: Request) {
 
     if (insertError) {
       return Response.json(
-        { error: "견적 저장 실패: " + insertError.message },
+        { error: "견적을 저장하지 못했습니다." },
         { status: 500 }
       );
     }
@@ -221,7 +218,7 @@ export async function POST(request: Request) {
         .insert(itemsPayload);
       if (itemsError) {
         return Response.json(
-          { error: "품목 저장 실패: " + itemsError.message },
+          { error: "견적 품목을 저장하지 못했습니다." },
           { status: 500 }
         );
       }

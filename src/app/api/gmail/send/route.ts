@@ -4,10 +4,10 @@ import { deleteGmailToken, getGmailToken } from "@/lib/gmail-token";
 import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
 
 export async function POST(request: NextRequest) {
-  const { user, supabase, authUnavailable } = await requireRouteUser();
+  const { user, authUnavailable } = await requireRouteUser();
   if (!user) return createRouteAuthErrorResponse(authUnavailable);
 
-  const token = await getGmailToken(supabase, user.id);
+  const token = await getGmailToken(null, user.id);
   if (!token) return NextResponse.json({ error: "not_connected" }, { status: 401 });
 
   const body = await request.json();
@@ -29,8 +29,8 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error("Gmail send error:", err);
     if (err instanceof GmailAuthError) {
-      await deleteGmailToken(supabase, token.tokenId);
-      return NextResponse.json({ error: "token_expired", message: err.message }, { status: 401 });
+      await deleteGmailToken(null, token.tokenId, user.id);
+      return NextResponse.json({ error: "token_expired", message: "Google 계정을 다시 연결해 주세요." }, { status: 401 });
     }
     return NextResponse.json({ error: "send_failed" }, { status: 500 });
   }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateApiKeyRecord } from "@/lib/api-key";
 import { logInfo } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { BadRequest, NotFound, UUID_RE, errorResponse, unauthorized } from "@/lib/yb-api/refs";
+import { BadRequest, NotFound, UUID_RE, errorResponse, unauthorized, dbError } from "@/lib/yb-api/refs";
 import { REVENUE_SELECT, pickRevenueFields, resolveAmounts } from "../_shared";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -46,7 +46,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     const { error } = await supabase.from("revenues").update(fields).eq("id", id);
-    if (error) throw new BadRequest(error.message);
+    if (error) throw dbError(error);
 
     const data = await selectRevenue(supabase, id);
     logInfo("UPDATE_REVENUE_API", `외부 API 매출 수정: ${data.title}`, {

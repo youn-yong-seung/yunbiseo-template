@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { logError, logInfo } from "@/lib/logger";
 
 const MAX_FAILED_ATTEMPTS = 5;
 const ATTEMPT_WINDOW_MINUTES = 10;
 const ATTEMPT_WINDOW_MS = ATTEMPT_WINDOW_MINUTES * 60 * 1000;
+// 5번 틀리면 15분 동안 잠근다. 예전처럼 계정을 비활성화하지 않는다
+// (누군가 관리자 ID 로 일부러 틀려서 관리자를 영구히 잠그는 것을 막기 위해).
+const LOCK_MINUTES = 15;
+const LOCK_MS = LOCK_MINUTES * 60 * 1000;
+const GENERIC_FAILURE = "로그인 ID 또는 비밀번호가 올바르지 않습니다.";
 
 type EmployeeLoginRow = {
   id: string;
@@ -57,194 +63,124 @@ async function findEmployeeByLoginId(loginId: string): Promise<EmployeeLoginRow 
   return null;
 }
 
-async function handlePrecheck(loginId: string) {
-  const employee = await findEmployeeByLoginId(loginId);
-
-  if (!employee) {
-    return NextResponse.json({
-      allowed: true,
-      email: toAuthEmail(loginId),
-    });
-  }
-
-  if (employee.is_active === false) {
-    logError("LOGIN_BLOCKED", `비활성 계정 로그인 차단: ${employee.login_id ?? loginId}`, {
-      resource: "employee",
-      resource_id: employee.id,
-      details: {
-        login_id: employee.login_id,
-      },
-    });
-
-    return NextResponse.json({
-      allowed: false,
-      blocked: true,
-      message: "계정이 비활성화되었습니다. 관리자에게 문의하세요.",
-      email: toAuthEmail(loginId),
-    });
-  }
-
-  return NextResponse.json({
-    allowed: true,
-    email: toAuthEmail(employee.login_id || loginId),
-  });
+function isLocked(employee: EmployeeLoginRow, now: Date) {
+  const count = employee.failed_login_count ?? 0;
+  const last = employee.last_failed_login_at ? new Date(employee.last_failed_login_at).getTime() : 0;
+  return count >= MAX_FAILED_ATTEMPTS && now.getTime() - last < LOCK_MS;
 }
 
-async function handleFailure(loginId: string, reason: string | null) {
-  const employee = await findEmployeeByLoginId(loginId);
-
-  if (!employee) {
-    logError("LOGIN_FAILED_UNKNOWN", `존재하지 않는 로그인 ID 시도: ${loginId}`, {
-      resource: "employee",
-      details: {
-        login_id: loginId,
-        reason,
-      },
-    });
-
-    return NextResponse.json({
-      blocked: false,
-      remaining_attempts: null,
-    });
-  }
-
-  if (employee.is_active === false) {
-    return NextResponse.json({
-      blocked: true,
-      remaining_attempts: 0,
-      message: "계정이 비활성화되었습니다. 관리자에게 문의하세요.",
-    });
-  }
-
-  const now = new Date();
-  const currentCount = employee.failed_login_count ?? 0;
+async function recordFailure(employee: EmployeeLoginRow, now: Date) {
   const windowStartedAt = employee.failed_login_window_started_at
     ? new Date(employee.failed_login_window_started_at)
     : null;
-
   const isWithinWindow =
     windowStartedAt && now.getTime() - windowStartedAt.getTime() <= ATTEMPT_WINDOW_MS;
+  const nextCount = isWithinWindow ? (employee.failed_login_count ?? 0) + 1 : 1;
 
-  const nextCount = isWithinWindow ? currentCount + 1 : 1;
-  const nextWindowStart = isWithinWindow
-    ? (windowStartedAt as Date).toISOString()
-    : now.toISOString();
-  const shouldDeactivate = nextCount >= MAX_FAILED_ATTEMPTS;
-
-  const updatePayload: Record<string, unknown> = {
-    failed_login_count: nextCount,
-    failed_login_window_started_at: nextWindowStart,
-    last_failed_login_at: now.toISOString(),
-  };
-
-  if (shouldDeactivate) {
-    updatePayload.is_active = false;
-  }
-
-  const supabase = createAdminClient();
-  const { error: updateError } = await supabase
-    .from("employees")
-    .update(updatePayload)
-    .eq("id", employee.id);
-
-  if (updateError) {
-    throw new Error(updateError.message);
-  }
-
-  const remainingAttempts = Math.max(0, MAX_FAILED_ATTEMPTS - nextCount);
-
-  logError("LOGIN_FAILED", `로그인 실패: ${employee.login_id ?? loginId}`, {
-    resource: "employee",
-    resource_id: employee.id,
-    details: {
-      login_id: employee.login_id,
-      failed_count: nextCount,
-      remaining_attempts: remainingAttempts,
-      blocked: shouldDeactivate,
-      reason,
-    },
-  });
-
-  if (shouldDeactivate) {
-    logError("LOGIN_DEACTIVATED", `로그인 5회 실패로 계정 비활성화: ${employee.login_id ?? loginId}`, {
-      resource: "employee",
-      resource_id: employee.id,
-      details: {
-        login_id: employee.login_id,
-        failed_count: nextCount,
-        window_minutes: ATTEMPT_WINDOW_MINUTES,
-      },
-    });
-  }
-
-  return NextResponse.json({
-    blocked: shouldDeactivate,
-    remaining_attempts: remainingAttempts,
-    message: shouldDeactivate
-      ? "비밀번호 5회 오류로 계정이 비활성화되었습니다. 관리자에게 문의하세요."
-      : `아이디 또는 비밀번호가 올바르지 않습니다. (${remainingAttempts}회 남음)`,
-  });
-}
-
-async function handleSuccess(loginId: string) {
-  const employee = await findEmployeeByLoginId(loginId);
-
-  if (!employee) {
-    return NextResponse.json({ success: true });
-  }
-
-  const supabase = createAdminClient();
-  const { error } = await supabase
+  await createAdminClient()
     .from("employees")
     .update({
-      failed_login_count: 0,
-      failed_login_window_started_at: null,
-      last_failed_login_at: null,
-      last_login_at: new Date().toISOString(),
+      failed_login_count: nextCount,
+      failed_login_window_started_at: isWithinWindow
+        ? (windowStartedAt as Date).toISOString()
+        : now.toISOString(),
+      last_failed_login_at: now.toISOString(),
     })
     .eq("id", employee.id);
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  logInfo("LOGIN_SUCCESS", `로그인 성공: ${employee.login_id ?? loginId}`, {
+  logError("LOGIN_FAILED", `로그인 실패: ${employee.login_id ?? ""}`, {
     resource: "employee",
     resource_id: employee.id,
-    details: {
-      login_id: employee.login_id,
-    },
+    details: { failed_count: nextCount },
   });
 
-  return NextResponse.json({ success: true });
+  return Math.max(0, MAX_FAILED_ATTEMPTS - nextCount);
 }
 
+/**
+ * 로그인. 비밀번호 확인과 실패 횟수 기록을 모두 서버에서 한다.
+ * (예전에는 브라우저가 "실패했다/성공했다"를 알려 줘서, 남이 실패를 꾸며 계정을 잠그거나
+ *  성공을 꾸며 잠금을 풀 수 있었다.)
+ *
+ * POST { login_id, password } → 성공 시 세션 쿠키를 심고 { success: true }
+ */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const action = typeof body.action === "string" ? body.action : "";
-    const loginId = normalizeLoginId(body.login_id);
+    const body = await request.json().catch(() => null);
+    const loginId = normalizeLoginId(body?.login_id);
+    const password = typeof body?.password === "string" ? body.password : "";
 
-    if (!loginId) {
-      return NextResponse.json({ error: "login_id is required" }, { status: 400 });
+    if (!loginId || !password || loginId.length > 200 || password.length > 200) {
+      return NextResponse.json({ error: "로그인 ID와 비밀번호를 입력해 주세요." }, { status: 400 });
     }
 
-    if (action === "precheck") {
-      return await handlePrecheck(loginId);
+    const now = new Date();
+    const employee = await findEmployeeByLoginId(loginId);
+
+    if (employee && employee.is_active === false) {
+      return NextResponse.json(
+        { error: "계정이 비활성화되었습니다. 관리자에게 문의하세요.", blocked: true },
+        { status: 403 }
+      );
     }
 
-    if (action === "failure") {
-      const reason = typeof body.reason === "string" ? body.reason : null;
-      return await handleFailure(loginId, reason);
+    if (employee && isLocked(employee, now)) {
+      return NextResponse.json(
+        { error: `비밀번호를 ${MAX_FAILED_ATTEMPTS}번 틀려 ${LOCK_MINUTES}분 동안 로그인할 수 없습니다. 잠시 후 다시 시도하세요.`, locked: true },
+        { status: 429 }
+      );
     }
 
-    if (action === "success") {
-      return await handleSuccess(loginId);
+    const supabase = await createClient();
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: toAuthEmail(employee?.login_id || loginId),
+      password,
+    });
+
+    if (error || !data.user) {
+      if (employee) {
+        const remaining = await recordFailure(employee, now);
+        return NextResponse.json(
+          {
+            error: remaining > 0 ? `${GENERIC_FAILURE} (${remaining}회 남음)` : GENERIC_FAILURE,
+            remaining_attempts: remaining,
+          },
+          { status: 401 }
+        );
+      }
+      return NextResponse.json({ error: GENERIC_FAILURE }, { status: 401 });
     }
 
-    return NextResponse.json({ error: "invalid action" }, { status: 400 });
+    // 비밀번호는 맞지만 직원으로 등록되지 않은 계정(예: Supabase 회원가입으로 만든 계정)은 들이지 않는다.
+    const admin = createAdminClient();
+    const { data: linked } = await admin
+      .from("employees")
+      .select("id, is_active")
+      .eq("auth_uid", data.user.id)
+      .maybeSingle();
+    if (!linked || linked.is_active !== true) {
+      await supabase.auth.signOut();
+      return NextResponse.json({ error: GENERIC_FAILURE }, { status: 401 });
+    }
+
+    await admin
+      .from("employees")
+      .update({
+        failed_login_count: 0,
+        failed_login_window_started_at: null,
+        last_failed_login_at: null,
+        last_login_at: now.toISOString(),
+      })
+      .eq("id", linked.id);
+
+    logInfo("LOGIN_SUCCESS", `로그인 성공: ${employee?.login_id ?? loginId}`, {
+      resource: "employee",
+      resource_id: linked.id as string,
+    });
+
+    return NextResponse.json({ success: true });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[login]", error);
+    return NextResponse.json({ error: "로그인 처리 중 오류가 발생했습니다." }, { status: 500 });
   }
 }

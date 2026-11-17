@@ -10,8 +10,10 @@ import {
   parseDate,
   resolveTaskRef,
   unauthorized,
+  dbError,
 } from "@/lib/yb-api/refs";
-import { parseEstimatedMinutes, parsePriority, parseStatus, resolveAssigneeIds, selectTask } from "../_shared";
+import { Forbidden, assertCanEditTask, parseEstimatedMinutes, parsePriority, parseStatus, resolveAssigneeIds, selectTask } from "../_shared";
+import { forbiddenResponse } from "@/lib/route-auth";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -29,6 +31,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     if (!data) throw new NotFound("Task not found");
     return NextResponse.json({ success: true, data });
   } catch (error) {
+    if (error instanceof Forbidden) return forbiddenResponse(error.message);
     return errorResponse(error);
   }
 }
@@ -45,6 +48,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     const { data: before } = await supabase.from("tasks").select("description").eq("id", id).maybeSingle();
     if (!before) throw new NotFound("Task not found");
+    await assertCanEditTask(supabase, id, apiKey.employee);
 
     const update: Record<string, unknown> = {};
     if (body.title !== undefined) {
@@ -83,16 +87,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     if (Object.keys(update).length > 0) {
       const { error } = await supabase.from("tasks").update(update).eq("id", id);
-      if (error) throw new BadRequest(error.message);
+      if (error) throw dbError(error);
     }
     if (assigneeIds !== undefined) {
       const { error: delError } = await supabase.from("task_assignees").delete().eq("task_id", id);
-      if (delError) throw new BadRequest(delError.message);
+      if (delError) throw dbError(delError);
       if (assigneeIds.length > 0) {
         const { error: insError } = await supabase
           .from("task_assignees")
           .insert(assigneeIds.map((employee_id) => ({ task_id: id, employee_id })));
-        if (insError) throw new BadRequest(insError.message);
+        if (insError) throw dbError(insError);
       }
     }
 
@@ -100,24 +104,28 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     logInfo("UPDATE_TASK_API", `API 할일 수정: ${id}`, { resource: "task", resource_id: id, details: update });
     return NextResponse.json({ success: true, data });
   } catch (error) {
+    if (error instanceof Forbidden) return forbiddenResponse(error.message);
     return errorResponse(error);
   }
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
-    if (!(await validateApiKeyRecord(request))) return unauthorized();
+    const apiKey = await validateApiKeyRecord(request);
+    if (!apiKey) return unauthorized();
     const { id: ref } = await context.params;
     const supabase = createAdminClient();
     const id = await resolveTaskRef(supabase, ref);
     if (!id) throw new NotFound("Task not found");
     const { data: existing } = await supabase.from("tasks").select("id, title").eq("id", id).maybeSingle();
     if (!existing) throw new NotFound("Task not found");
+    await assertCanEditTask(supabase, id, apiKey.employee);
     const { error } = await supabase.from("tasks").delete().eq("id", id);
-    if (error) throw new BadRequest(error.message);
+    if (error) throw dbError(error);
     logInfo("DELETE_TASK_API", `API 할일 삭제: ${existing.title}`, { resource: "task", resource_id: id });
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (error instanceof Forbidden) return forbiddenResponse(error.message);
     return errorResponse(error);
   }
 }

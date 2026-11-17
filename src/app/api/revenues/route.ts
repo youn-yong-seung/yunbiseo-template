@@ -9,6 +9,7 @@ import {
   parseLimit,
   resolveProjectRef,
   unauthorized,
+  dbError,
 } from "@/lib/yb-api/refs";
 import { REVENUE_SELECT, parseBoolean, pickRevenueFields, resolveAmounts, todayKst } from "./_shared";
 
@@ -59,7 +60,7 @@ export async function GET(request: NextRequest) {
       .order("revenue_date", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false })
       .limit(parseLimit(params.get("limit"), 50, 500));
-    if (error) throw new BadRequest(error.message);
+    if (error) throw dbError(error);
     return NextResponse.json({ success: true, data: data ?? [] });
   } catch (error) {
     return errorResponse(error);
@@ -98,7 +99,7 @@ export async function POST(request: NextRequest) {
       .insert({ ...fields, ...amounts })
       .select(REVENUE_SELECT)
       .single();
-    if (error) throw new BadRequest(error.message);
+    if (error) throw dbError(error);
 
     logInfo("CREATE_REVENUE", `매출 등록: ${data.title}`, {
       resource: "revenue",

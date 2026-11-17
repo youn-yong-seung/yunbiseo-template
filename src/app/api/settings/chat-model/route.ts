@@ -1,5 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
+import { publicErrorMessage } from "@/lib/safe-error";
+import { requireRouteAdmin } from "@/lib/route-auth";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -12,10 +14,10 @@ const MODEL_META: Record<string, { tier: string; context: string; maxOutput: str
 };
 
 export async function GET() {
-  const { supabase, user, authUnavailable } = await requireRouteUser();
-  if (!user) {
-    return createRouteAuthErrorResponse(authUnavailable);
-  }
+  // 외부 서비스 키 설정은 관리자만 보고 바꾼다.
+  const auth = await requireRouteAdmin();
+  if (!auth.ok) return auth.response;
+  const supabase = createAdminClient();
 
   // Current model settings
   const { data: settings } = await supabase
@@ -54,16 +56,19 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  const { supabase, user, authUnavailable } = await requireRouteUser();
-  if (!user) {
-    return createRouteAuthErrorResponse(authUnavailable);
-  }
+  // 외부 서비스 키 설정은 관리자만 보고 바꾼다.
+  const auth = await requireRouteAdmin();
+  if (!auth.ok) return auth.response;
+  const supabase = createAdminClient();
 
   const { model, key } = await request.json();
   if (!model || typeof model !== "string") {
     return Response.json({ error: "model is required" }, { status: 400 });
   }
 
+  if (model.length > 100 || !/^[A-Za-z0-9._-]+$/.test(model)) {
+    return Response.json({ error: "model 값이 올바르지 않습니다." }, { status: 400 });
+  }
   const settingKey = key === "quotation_ai_model" ? "quotation_ai_model" : "chat_model";
 
   const { error } = await supabase
@@ -71,7 +76,7 @@ export async function PUT(request: Request) {
     .upsert({ key: settingKey, value: model, updated_at: new Date().toISOString() });
 
   if (error) {
-    return Response.json({ error: error.message }, { status: 500 });
+    return Response.json({ error: publicErrorMessage(error) }, { status: 500 });
   }
 
   return Response.json({ success: true, model });

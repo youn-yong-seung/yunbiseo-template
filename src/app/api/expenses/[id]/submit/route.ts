@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { publicErrorMessage } from "@/lib/safe-error";
 
 import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
 import { resolveActorEmployee, submitExpense } from "@/lib/expense-mutations";
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
     return NextResponse.json({ success: true, data });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "지출 결의 제출에 실패했습니다.";
+    const message = publicErrorMessage(error, "지출 결의 제출에 실패했습니다.");
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

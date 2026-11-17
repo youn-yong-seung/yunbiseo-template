@@ -19,13 +19,23 @@ function isValidState(value: string | null): value is string {
   return value !== null && /^[0-9a-f]{16,128}$/.test(value);
 }
 
+function isValidChallenge(value: string | null): value is string {
+  return value !== null && /^[A-Za-z0-9_-]{43,128}$/.test(value);
+}
+
 function CliAuthInner() {
   const searchParams = useSearchParams();
   const portParam = searchParams.get("port");
   const stateParam = searchParams.get("state");
+  // PKCE: CLI 가 만든 code_challenge. 있으면 서버에 같이 저장해 그 CLI 만 코드를 바꿀 수 있게 한다.
+  const challengeParam = searchParams.get("challenge");
+  const challenge = isValidChallenge(challengeParam) ? challengeParam : null;
 
   // port 는 선택(1024–65535). port 가 있으면 state(16–128 hex) 필수.
   const validation = useMemo(() => {
+    if (challengeParam !== null && !isValidChallenge(challengeParam)) {
+      return { ok: false as const };
+    }
     if (portParam === null) {
       return { ok: true as const, port: null as number | null, state: null as string | null };
     }
@@ -33,7 +43,7 @@ function CliAuthInner() {
       return { ok: false as const };
     }
     return { ok: true as const, port: Number(portParam), state: stateParam };
-  }, [portParam, stateParam]);
+  }, [portParam, stateParam, challengeParam]);
 
   const [loading, setLoading] = useState(false);
   const [code, setCode] = useState<string | null>(null);
@@ -44,7 +54,11 @@ function CliAuthInner() {
     setError("");
     setLoading(true);
     try {
-      const res = await fetch("/api/cli-auth/start", { method: "POST" });
+      const res = await fetch("/api/cli-auth/start", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(challenge ? { code_challenge: challenge } : {}),
+      });
       if (res.status === 401) {
         // 로그인 전이면 로그인 화면으로 보냈다가 이 화면(포트·state 그대로)으로 돌아온다.
         const returnTo = window.location.pathname + window.location.search;

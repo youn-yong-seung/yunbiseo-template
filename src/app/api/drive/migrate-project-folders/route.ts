@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createFolder, moveFile } from "@/lib/google-drive";
 import { logInfo } from "@/lib/logger";
-import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
+import { requireRouteAdmin } from "@/lib/route-auth";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -12,13 +12,15 @@ import { createClient } from "@/lib/supabase/server";
  */
 export async function POST() {
   try {
-    const { user, authUnavailable } = await requireRouteUser();
-    if (!user) {
-      return createRouteAuthErrorResponse(authUnavailable);
-    }
+    // 모든 프로젝트 폴더를 옮기는 일괄 작업이라 관리자만 한다.
+    const auth = await requireRouteAdmin();
+    if (!auth.ok) return auth.response;
 
     const supabase = await createClient();
-    const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID!;
+    const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
+    if (!rootFolderId) {
+      return NextResponse.json({ error: "Google Drive 연동이 설정되지 않았습니다." }, { status: 400 });
+    }
 
     // 1. 모든 프로젝트 유형 조회
     const { data: types, error: typesError } = await supabase

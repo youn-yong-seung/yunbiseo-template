@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { publicErrorMessage } from "@/lib/safe-error";
 import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
 import { suggestDepositRevenueMatch } from "@/lib/gemini-deposit-match";
 
@@ -75,7 +76,7 @@ export async function POST(
     return NextResponse.json({ ok: true, suggestions: enriched });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "AI 매칭 실패" },
+      { error: publicErrorMessage(error, "AI 매칭 실패") },
       { status: 500 }
     );
   }

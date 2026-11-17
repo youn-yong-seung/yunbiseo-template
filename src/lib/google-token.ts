@@ -38,19 +38,23 @@ function toTokenPayload(
   };
 }
 
+/**
+ * 일정(구글 캘린더)용 토큰. 본인이 연결한 토큰을 먼저 쓰고, 없으면 관리자가 회사 공용으로 연결한 토큰(is_global)을 쓴다.
+ * supabase 는 service role 클라이언트여야 한다(google_oauth_tokens 는 브라우저 정책이 없다).
+ */
 export async function getGoogleOAuthToken(
   supabase: SupabaseClient,
   userId: string
 ) {
-  const { data: token } = await supabase
+  const { data: own } = await supabase
     .from("google_oauth_tokens")
     .select("id, gmail_email, access_token, refresh_token, token_expiry")
-    .or(`user_id.eq.${userId},is_global.eq.true`)
-    .order("is_global", { ascending: false })
+    .eq("user_id", userId)
     .limit(1)
-    .single();
+    .maybeSingle();
+  if (own) return toTokenPayload(supabase, own as GoogleTokenRow);
 
-  return toTokenPayload(supabase, token as GoogleTokenRow | null);
+  return getGlobalGoogleOAuthToken(supabase);
 }
 
 export async function getGlobalGoogleOAuthToken(supabase: SupabaseClient) {
@@ -58,8 +62,9 @@ export async function getGlobalGoogleOAuthToken(supabase: SupabaseClient) {
     .from("google_oauth_tokens")
     .select("id, gmail_email, access_token, refresh_token, token_expiry")
     .eq("is_global", true)
+    .order("updated_at", { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
 
   return toTokenPayload(supabase, token as GoogleTokenRow | null);
 }

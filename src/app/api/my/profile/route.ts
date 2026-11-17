@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
+import { publicErrorMessage } from "@/lib/safe-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logInfo, logError } from "@/lib/logger";
 import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
 
 export async function PATCH(request: NextRequest) {
   try {
-    const body = await request.json();
+    const { user, authUnavailable } = await requireRouteUser();
+    if (!user) {
+      return createRouteAuthErrorResponse(authUnavailable);
+    }
+
+    const body = (await request.json().catch(() => null)) ?? {};
     const { name, department, position, email, phone, login_id } = body;
 
     if (!name?.trim()) {
@@ -22,10 +28,6 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const { user, authUnavailable } = await requireRouteUser();
-    if (!user) {
-      return createRouteAuthErrorResponse(authUnavailable);
-    }
 
     const adminSupabase = createAdminClient();
 
@@ -78,7 +80,7 @@ export async function PATCH(request: NextRequest) {
         resource: "employee",
         resource_id: currentEmp.id,
       });
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: publicErrorMessage(error) }, { status: 400 });
     }
 
     // login_id가 변경된 경우 auth email도 업데이트

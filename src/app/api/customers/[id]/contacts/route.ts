@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateApiKeyRecord } from "@/lib/api-key";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { BadRequest, NotFound, errorResponse, unauthorized } from "@/lib/yb-api/refs";
+import { BadRequest, NotFound, errorResponse, unauthorized, dbError } from "@/lib/yb-api/refs";
 import { pickContactFields } from "../../_shared";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       .select("*")
       .eq("customer_id", id)
       .order("created_at", { ascending: true });
-    if (error) throw new BadRequest(error.message);
+    if (error) throw dbError(error);
     return NextResponse.json({ data: data ?? [] });
   } catch (error) {
     return errorResponse(error);
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .insert({ ...fields, customer_id: id })
       .select("*")
       .single();
-    if (error) throw new BadRequest(error.message);
+    if (error) throw dbError(error);
     return NextResponse.json({ data }, { status: 201 });
   } catch (error) {
     return errorResponse(error);

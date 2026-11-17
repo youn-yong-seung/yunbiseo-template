@@ -8,6 +8,7 @@ export interface IssuedApiKey {
   name: string;
   key_prefix: string;
   created_by: string;
+  employee_id: string;
   created_at: string;
   /** 원문 키 — 이 반환값에서만 1회 제공된다. 로그·저장 금지. */
   raw_key: string;
@@ -16,10 +17,12 @@ export interface IssuedApiKey {
 /**
  * API 키를 생성해 api_keys 에 저장하고 원문을 1회 반환한다.
  * 웹 UI(POST /api/api-keys)와 yb login(cli-auth/exchange)이 공통으로 사용한다.
+ * 키 주인은 employee_id 로 묶는다. created_by(이름)는 표시용이다.
+ * supabase 는 service role 클라이언트여야 한다(api_keys 는 브라우저 정책이 없다).
  */
 export async function issueApiKey(
   supabase: SupabaseClient,
-  { name, createdBy }: { name: string; createdBy: string }
+  { name, employeeId, employeeName }: { name: string; employeeId: string; employeeName: string }
 ): Promise<IssuedApiKey> {
   const rawKey = generateApiKey();
   const keyHash = hashApiKey(rawKey);
@@ -29,17 +32,18 @@ export async function issueApiKey(
   const { data, error } = await supabase
     .from("api_keys")
     .insert({
-      name,
+      name: name.slice(0, 100),
       key_hash: keyHash,
       key_prefix: keyPrefix,
       key_encrypted: keyEncrypted,
-      created_by: createdBy,
+      created_by: employeeName,
+      employee_id: employeeId,
     })
-    .select("id, name, key_prefix, created_by, created_at")
+    .select("id, name, key_prefix, created_by, employee_id, created_at")
     .single();
 
   if (error || !data) {
-    throw new Error(error?.message ?? "API 키 생성에 실패했습니다.");
+    throw new Error("API 키 생성에 실패했습니다.");
   }
 
   return { ...data, raw_key: rawKey } as IssuedApiKey;

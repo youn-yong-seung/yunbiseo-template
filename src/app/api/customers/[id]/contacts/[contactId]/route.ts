@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateApiKeyRecord } from "@/lib/api-key";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { BadRequest, NotFound, errorResponse, unauthorized } from "@/lib/yb-api/refs";
+import { BadRequest, NotFound, errorResponse, unauthorized, dbError } from "@/lib/yb-api/refs";
 import { pickContactFields } from "../../../_shared";
 
 type RouteContext = { params: Promise<{ id: string; contactId: string }> };
@@ -22,7 +22,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       .eq("customer_id", id)
       .select("*")
       .maybeSingle();
-    if (error) throw new BadRequest(error.message);
+    if (error) throw dbError(error);
     if (!data) throw new NotFound("Contact not found");
     return NextResponse.json({ data });
   } catch (error) {
@@ -41,7 +41,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       .eq("customer_id", id)
       .select("id")
       .maybeSingle();
-    if (error) throw new BadRequest(error.message);
+    if (error) throw dbError(error);
     if (!data) throw new NotFound("Contact not found");
     return NextResponse.json({ success: true });
   } catch (error) {

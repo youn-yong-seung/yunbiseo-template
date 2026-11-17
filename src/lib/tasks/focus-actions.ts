@@ -21,10 +21,8 @@ export async function startFocus(
         estimated_minutes: params.estimatedMinutes,
       })
       .eq("id", params.taskId),
-    supabase
-      .from("employees")
-      .update({ focused_task_id: params.taskId })
-      .eq("id", params.employeeId),
+    // 직원 행 수정은 관리자 전용이라, 내 집중 할 일 칸만 바꾸는 함수로 저장한다.
+    supabase.rpc("set_my_focused_task", { p_task_id: params.taskId }),
   ]);
   const first = results.find((r) => r.error);
   if (first?.error) return { ok: false, error: first.error.message } as const;
@@ -57,10 +55,7 @@ export async function completeFocus(
         actual_minutes: actualMinutes,
       })
       .eq("id", params.taskId),
-    supabase
-      .from("employees")
-      .update({ focused_task_id: null })
-      .eq("id", params.employeeId),
+    supabase.rpc("set_my_focused_task", { p_task_id: null }),
   ]);
   const first = results.find((r) => r.error);
   if (first?.error) return { ok: false, error: first.error.message } as const;
@@ -81,10 +76,7 @@ export async function stopFocus(
       .from("tasks")
       .update({ started_at: null })
       .eq("id", params.taskId),
-    supabase
-      .from("employees")
-      .update({ focused_task_id: null })
-      .eq("id", params.employeeId),
+    supabase.rpc("set_my_focused_task", { p_task_id: null }),
   ]);
   const first = results.find((r) => r.error);
   if (first?.error) return { ok: false, error: first.error.message } as const;

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateApiKeyRecord } from "@/lib/api-key";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { BadRequest, NotFound, errorResponse, resolveProjectRef, unauthorized } from "@/lib/yb-api/refs";
+import { NotFound, errorResponse, resolveProjectRef, unauthorized, dbError } from "@/lib/yb-api/refs";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       .eq("project_id", id)
       .order("created_at", { ascending: false })
       .limit(100);
-    if (error) throw new BadRequest(error.message);
+    if (error) throw dbError(error);
 
     const latest = (history ?? []).find((row) => row.to_status === project.status);
     return NextResponse.json({

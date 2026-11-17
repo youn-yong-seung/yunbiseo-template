@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateApiKeyRecord } from "@/lib/api-key";
 import { logInfo } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { BadRequest, errorResponse, parseDate, parseLimit, unauthorized } from "@/lib/yb-api/refs";
+import { BadRequest, errorResponse, parseDate, parseLimit, unauthorized, dbError } from "@/lib/yb-api/refs";
 import { CARD_TX_SELECT, kstDayEnd, kstDayStart, pickCardTxFields } from "./_shared";
 
 /**
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query
       .order("approved_at", { ascending: false })
       .limit(parseLimit(params.get("limit"), 50, 500));
-    if (error) throw new BadRequest(error.message);
+    if (error) throw dbError(error);
     return NextResponse.json({ success: true, data: data ?? [] });
   } catch (error) {
     return errorResponse(error);
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
       .insert({ ...fields, source: "manual", is_cancellation: (fields.amount as number) < 0 })
       .select(CARD_TX_SELECT)
       .single();
-    if (error) throw new BadRequest(error.message);
+    if (error) throw dbError(error);
 
     logInfo("CREATE_CARD_TRANSACTION", `카드내역 수기 등록: ${data.merchant ?? "-"} ${data.amount}원`, {
       resource: "card_transaction",

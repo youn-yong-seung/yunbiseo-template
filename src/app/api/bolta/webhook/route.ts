@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "crypto";
+import { publicErrorMessage } from "@/lib/safe-error";
 
 import { NextRequest, NextResponse } from "next/server";
 
@@ -73,7 +74,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ error: revenueError.message }, { status: 400 });
+    return NextResponse.json({ error: publicErrorMessage(revenueError) }, { status: 400 });
   }
 
   if (!revenue) {
@@ -139,7 +140,7 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      return NextResponse.json({ error: updateError.message }, { status: 400 });
+      return NextResponse.json({ error: publicErrorMessage(updateError) }, { status: 400 });
     }
 
     logInfo("COMPLETE_REVENUE_TAX_INVOICE", `세금계산서 발행 완료: ${revenue.title}`, {
@@ -205,7 +206,7 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      return NextResponse.json({ error: updateError.message }, { status: 400 });
+      return NextResponse.json({ error: publicErrorMessage(updateError) }, { status: 400 });
     }
 
     logError("FAIL_REVENUE_TAX_INVOICE_WEBHOOK", `세금계산서 발행 실패: ${revenue.title}`, {

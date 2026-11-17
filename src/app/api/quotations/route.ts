@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { publicErrorMessage } from "@/lib/safe-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { validateApiKey } from "@/lib/api-key";
 import { toKstDateString } from "@/lib/date";
@@ -18,12 +19,12 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: false });
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: publicErrorMessage(error) }, { status: 400 });
     }
 
     return NextResponse.json({ success: true, data });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown server error";
+    const message = publicErrorMessage(error, "서버 오류가 발생했습니다.");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
     const { data: quotationNumber, error: rpcError } = await supabase.rpc("generate_quotation_number");
     if (rpcError || !quotationNumber) {
       return NextResponse.json(
-        { error: "Failed to generate quotation number: " + (rpcError?.message ?? "") },
+        { error: "견적번호를 만들지 못했습니다." },
         { status: 500 }
       );
     }
@@ -87,7 +88,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: publicErrorMessage(error) }, { status: 400 });
     }
 
     // Insert items if provided
@@ -106,7 +107,7 @@ export async function POST(request: NextRequest) {
 
       const { error: itemsError } = await supabase.from("quotation_items").insert(itemsPayload);
       if (itemsError) {
-        return NextResponse.json({ error: "Items insert failed: " + itemsError.message }, { status: 400 });
+        return NextResponse.json({ error: "견적 품목을 저장하지 못했습니다." }, { status: 400 });
       }
     }
 
@@ -117,7 +118,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, data }, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown server error";
+    const message = publicErrorMessage(error, "서버 오류가 발생했습니다.");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

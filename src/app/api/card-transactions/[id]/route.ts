@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateApiKeyRecord } from "@/lib/api-key";
 import { logInfo } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { BadRequest, errorResponse, unauthorized } from "@/lib/yb-api/refs";
+import { BadRequest, errorResponse, unauthorized, dbError } from "@/lib/yb-api/refs";
 import { pickCardTxFields, selectCardTx } from "../_shared";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -33,7 +33,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (Object.keys(fields).length === 0) throw new BadRequest("바꿀 필드가 없습니다");
 
     const { error } = await supabase.from("card_transactions").update(fields).eq("id", id);
-    if (error) throw new BadRequest(error.message);
+    if (error) throw dbError(error);
 
     const data = await selectCardTx(supabase, id);
     logInfo("UPDATE_CARD_TRANSACTION", `카드내역 수정: ${data.merchant ?? "-"}`, {
@@ -54,7 +54,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     const supabase = createAdminClient();
     const current = await selectCardTx(supabase, id);
     const { error } = await supabase.from("card_transactions").delete().eq("id", id);
-    if (error) throw new BadRequest(error.message);
+    if (error) throw dbError(error);
     logInfo("DELETE_CARD_TRANSACTION", `카드내역 삭제: ${current.merchant ?? "-"} ${current.amount}원`, {
       resource: "card_transaction",
       resource_id: id,

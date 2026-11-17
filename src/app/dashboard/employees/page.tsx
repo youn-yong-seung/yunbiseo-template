@@ -25,7 +25,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { suggestSlackIdForEmployee } from "@/lib/employee-slack";
 import { resolveEmployeeType } from "@/lib/employee-type";
 import { createClient } from "@/lib/supabase/client";
 import type { Employee, EmployeeInsert } from "@/lib/types";
@@ -71,65 +70,9 @@ export default function EmployeesPage() {
       return;
     }
 
-    let rows = data ?? [];
-
-    if (user) {
-      const currentEmployee = rows.find((employee) => employee.auth_uid === user.id);
-
-      if (currentEmployee && supportsEmployeeType && currentEmployee.employee_type !== "관리자") {
-        const { error: roleUpdateError } = await supabase
-          .from("employees")
-          .update({ employee_type: "관리자" })
-          .eq("id", currentEmployee.id);
-
-        if (roleUpdateError) {
-          console.error("관리자 권한 업데이트 실패:", roleUpdateError.message);
-          toast.error("관리자 권한 업데이트에 실패했습니다. 잠시 후 다시 시도해주세요.");
-        } else {
-          rows = rows.map((employee) =>
-            employee.id === currentEmployee.id
-              ? { ...employee, employee_type: "관리자" }
-              : employee
-          );
-        }
-      }
-    }
-
-    if (user && !rows.some((employee) => employee.auth_uid === user.id)) {
-      const guessedName =
-        typeof user.user_metadata?.name === "string" && user.user_metadata.name
-          ? user.user_metadata.name
-          : user.email?.split("@")[0] || "관리자";
-
-      const basePayload = {
-        name: guessedName,
-        department: null,
-        position: null,
-        email: user.email || null,
-        phone: null,
-        slack_id: suggestSlackIdForEmployee(guessedName, null) || null,
-        hire_date: null,
-        login_id: null,
-        auth_uid: user.id,
-      };
-
-      const insertPayload = supportsEmployeeType
-        ? { ...basePayload, employee_type: "관리자" }
-        : basePayload;
-
-      const { data: inserted, error: insertError } = await supabase
-        .from("employees")
-        .insert(insertPayload)
-        .select("*")
-        .single();
-
-      if (insertError) {
-        console.error("관리자 자동 등록 실패:", insertError.message);
-        toast.error("관리자 자동 등록에 실패했습니다. 잠시 후 다시 시도해주세요.");
-      } else if (inserted) {
-        rows = [inserted, ...rows];
-      }
-    }
+    // 예전에는 이 화면을 연 사람을 자동으로 "관리자"로 바꾸거나 관리자로 등록했다(권한 상승 결함).
+    // 관리자 지정은 관리자만 직원 수정 화면에서 한다. 첫 관리자는 `npm run setup:admin` 으로 만든다.
+    const rows = data ?? [];
 
     setEmployees(rows);
     setLoading(false);

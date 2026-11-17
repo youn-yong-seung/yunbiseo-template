@@ -1,4 +1,7 @@
-import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
+import { requireRouteAdmin } from "@/lib/route-auth";
+import { maskSecret } from "@/lib/secret-mask";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { publicErrorMessage } from "@/lib/safe-error";
 import { getSystemSettings } from "@/lib/system-settings";
 
 const GEMINI_SETTING_KEYS = ["gemini_api_key"] as const;
@@ -8,10 +11,10 @@ function asTrimmedString(value: unknown) {
 }
 
 export async function GET() {
-  const { supabase, user, authUnavailable } = await requireRouteUser();
-  if (!user) {
-    return createRouteAuthErrorResponse(authUnavailable);
-  }
+  // 외부 서비스 키 설정은 관리자만 보고 바꾼다.
+  const auth = await requireRouteAdmin();
+  if (!auth.ok) return auth.response;
+  const supabase = createAdminClient();
   const settings = await getSystemSettings([...GEMINI_SETTING_KEYS]);
 
   const { data: recentLogs } = await supabase
@@ -37,7 +40,7 @@ export async function GET() {
   }
 
   return Response.json({
-    api_key: settings.gemini_api_key ?? process.env.GEMINI_API_KEY ?? "",
+    api_key: maskSecret(settings.gemini_api_key ?? process.env.GEMINI_API_KEY),
     usage: {
       total_requests: totalRequests,
       input_tokens: totalInputTokens,
@@ -52,13 +55,17 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  const { supabase, user, authUnavailable } = await requireRouteUser();
-  if (!user) {
-    return createRouteAuthErrorResponse(authUnavailable);
-  }
+  // 외부 서비스 키 설정은 관리자만 보고 바꾼다.
+  const auth = await requireRouteAdmin();
+  if (!auth.ok) return auth.response;
+  const supabase = createAdminClient();
   const body = await request.json().catch(() => null);
   const hasApiKey = body && Object.prototype.hasOwnProperty.call(body, "api_key");
   const apiKey = hasApiKey ? asTrimmedString(body?.api_key) : "";
+  // 가린 값(••••)이 그대로 오면 바꾸지 않는다.
+  if (hasApiKey && apiKey.startsWith("••••")) {
+    return Response.json({ success: true });
+  }
 
   if (hasApiKey && apiKey) {
     const { error } = await supabase
@@ -75,7 +82,7 @@ export async function PUT(request: Request) {
       );
 
     if (error) {
-      return Response.json({ error: error.message }, { status: 500 });
+      return Response.json({ error: publicErrorMessage(error) }, { status: 500 });
     }
   }
 
@@ -86,7 +93,7 @@ export async function PUT(request: Request) {
       .in("key", ["gemini_api_key"]);
 
     if (error) {
-      return Response.json({ error: error.message }, { status: 500 });
+      return Response.json({ error: publicErrorMessage(error) }, { status: 500 });
     }
   }
 

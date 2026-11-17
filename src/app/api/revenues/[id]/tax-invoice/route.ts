@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { publicErrorMessage } from "@/lib/safe-error";
 import { NextResponse } from "next/server";
 
 import {
@@ -597,7 +598,7 @@ export async function GET(request: Request, context: RouteContext) {
     });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Unknown server error";
+      publicErrorMessage(error, "서버 오류가 발생했습니다.");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -723,7 +724,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Unknown server error";
+      publicErrorMessage(error, "서버 오류가 발생했습니다.");
 
     logError("ERROR_REVENUE_TAX_INVOICE_PATCH", `세금계산서 상태 복구 API 오류: ${id}`, {
       resource: "revenue",
@@ -956,7 +957,7 @@ export async function POST(request: Request, context: RouteContext) {
     }
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Unknown server error";
+      publicErrorMessage(error, "서버 오류가 발생했습니다.");
 
     logError("ERROR_REVENUE_TAX_INVOICE", `세금계산서 발행 API 오류: ${id}`, {
       resource: "revenue",

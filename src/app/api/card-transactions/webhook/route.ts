@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { publicErrorMessage } from "@/lib/safe-error";
 import { validateApiKey } from "@/lib/api-key";
 import { parseCardSms } from "@/lib/card-sms-parser";
 import { extractCardWebhookText } from "@/lib/card-webhook-payload";
@@ -99,7 +100,7 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ success: true, data }, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown server error";
+    const message = publicErrorMessage(error, "서버 오류가 발생했습니다.");
     logError("CARD_SMS_WEBHOOK_ERROR", `카드 문자 저장 실패: ${message}`, { details: { message } });
     return NextResponse.json({ error: message }, { status: 500 });
   }

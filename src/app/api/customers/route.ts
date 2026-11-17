@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateApiKeyRecord } from "@/lib/api-key";
 import { logInfo } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { BadRequest, errorResponse, normalizeText, parseLimit, unauthorized } from "@/lib/yb-api/refs";
+import { BadRequest, errorResponse, normalizeText, parseLimit, unauthorized, dbError } from "@/lib/yb-api/refs";
 import { CUSTOMER_SELECT, pickCustomerFields } from "./_shared";
 
 /**
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query
       .order("created_at", { ascending: false })
       .limit(parseLimit(params.get("limit"), 20, 100));
-    if (error) throw new BadRequest(error.message);
+    if (error) throw dbError(error);
     return NextResponse.json({ data: data ?? [] });
   } catch (error) {
     return errorResponse(error);

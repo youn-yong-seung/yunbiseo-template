@@ -1,4 +1,5 @@
 import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
+import { publicErrorMessage } from "@/lib/safe-error";
 import { isSlackConfigured, sendProjectCreatedSlackMessage } from "@/lib/slack";
 
 function asTrimmedString(value: unknown) {
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
     return Response.json({ success: true });
   } catch (error) {
     return Response.json(
-      { error: error instanceof Error ? error.message : "Slack 프로젝트 알림 발송에 실패했습니다." },
+      { error: publicErrorMessage(error, "Slack 프로젝트 알림 발송에 실패했습니다.") },
       { status: 500 }
     );
   }

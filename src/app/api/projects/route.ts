@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateApiKeyRecord } from "@/lib/api-key";
 import { logInfo } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { BadRequest, errorResponse, normalizeText, parseLimit, resolveActor, unauthorized } from "@/lib/yb-api/refs";
+import { BadRequest, errorResponse, normalizeText, parseLimit, resolveActor, unauthorized, dbError } from "@/lib/yb-api/refs";
 import { PROJECT_SELECT, parseProjectStatus, pickProjectFields, selectProject, setProjectStatus, syncProjectAssignees } from "./_shared";
 
 /**
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query
       .order("created_at", { ascending: false })
       .limit(parseLimit(params.get("limit"), 20, 200));
-    if (error) throw new BadRequest(error.message);
+    if (error) throw dbError(error);
     return NextResponse.json({ success: true, data: data ?? [] });
   } catch (error) {
     return errorResponse(error);
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       await syncProjectAssignees(supabase, inserted.id, fields.manager as string | null);
     }
     if (status !== "진행예정") {
-      const actor = await resolveActor(supabase, apiKey.created_by);
+      const actor = await resolveActor(apiKey);
       await setProjectStatus(supabase, inserted.id, status, null, actor?.id ?? null);
     }
 

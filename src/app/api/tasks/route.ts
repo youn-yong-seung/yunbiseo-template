@@ -12,6 +12,7 @@ import {
   resolveEmployeeRef,
   resolveTaskRef,
   unauthorized,
+  dbError,
 } from "@/lib/yb-api/refs";
 import { TASK_SELECT, parseEstimatedMinutes, parsePriority, parseStatus, resolveAssigneeIds, selectTask } from "./_shared";
 
@@ -38,9 +39,9 @@ export async function GET(request: NextRequest) {
 
     // assignee 는 그 직원이 담당인 할 일(공동 담당 포함), requester 는 그 직원이 만든(맡긴) 할 일.
     const assigneeRef = params.get("assignee")?.trim();
-    const assigneeId = assigneeRef ? await resolveEmployeeRef(supabase, assigneeRef, apiKey.created_by) : null;
+    const assigneeId = assigneeRef ? await resolveEmployeeRef(supabase, assigneeRef, resolveActor(apiKey)) : null;
     const requesterRef = params.get("requester")?.trim();
-    const requesterId = requesterRef ? await resolveEmployeeRef(supabase, requesterRef, apiKey.created_by) : null;
+    const requesterId = requesterRef ? await resolveEmployeeRef(supabase, requesterRef, resolveActor(apiKey)) : null;
 
     let query = supabase
       .from("tasks")
@@ -49,7 +50,10 @@ export async function GET(request: NextRequest) {
     if (requesterId) query = query.eq("created_by", requesterId);
 
     const q = params.get("q")?.trim();
-    if (q) query = query.or(`title.ilike.%${q}%,description.ilike.%${q}%`);
+    if (q) {
+      const like = `%${q.replace(/[,()%_\\]/g, " ")}%`;
+      query = query.or(`title.ilike.${like},description.ilike.${like}`);
+    }
     const statuses = (params.get("status") ?? "").split(",").map((v) => v.trim()).filter(Boolean);
     if (statuses.length === 1) query = query.eq("status", statuses[0]);
     if (statuses.length > 1) query = query.in("status", statuses);
@@ -65,7 +69,7 @@ export async function GET(request: NextRequest) {
     query = query.limit(parseLimit(params.get("limit"), 50, 200));
 
     const { data, error } = await query;
-    if (error) throw new BadRequest(error.message);
+    if (error) throw dbError(error);
     const rows = (data ?? []) as unknown as Array<Record<string, unknown>>;
     return NextResponse.json({
       success: true,
@@ -90,7 +94,7 @@ export async function POST(request: NextRequest) {
     if (!title) throw new BadRequest("title is required");
 
     const supabase = createAdminClient();
-    const actor = await resolveActor(supabase, apiKey.created_by);
+    const actor = await resolveActor(apiKey);
     // 담당자를 안 주면 부른 사람이 담당자다.
     const assigneeIds =
       (await resolveAssigneeIds(supabase, body.assignee_ids ?? body.assignees ?? body.assignee ?? body.assigned_to)) ??
@@ -116,13 +120,13 @@ export async function POST(request: NextRequest) {
       })
       .select("id")
       .single();
-    if (error || !inserted) throw new BadRequest(error?.message ?? "Task insert failed");
+    if (error || !inserted) throw dbError(error);
 
     if (assigneeIds.length > 0) {
       const { error: assignError } = await supabase
         .from("task_assignees")
         .insert(assigneeIds.map((employee_id) => ({ task_id: inserted.id, employee_id })));
-      if (assignError) throw new BadRequest(assignError.message);
+      if (assignError) throw dbError(assignError);
     }
 
     const data = await selectTask(supabase, inserted.id as string);

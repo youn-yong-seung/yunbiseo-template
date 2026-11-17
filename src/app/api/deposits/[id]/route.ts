@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { publicErrorMessage } from "@/lib/safe-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { validateApiKey } from "@/lib/api-key";
 import { logInfo } from "@/lib/logger";
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       .maybeSingle();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: publicErrorMessage(error) }, { status: 400 });
     }
 
     if (!data) {
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     return NextResponse.json({ success: true, data });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown server error";
+    const message = publicErrorMessage(error, "서버 오류가 발생했습니다.");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -134,7 +135,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           .maybeSingle();
 
         if (revenueError) {
-          return NextResponse.json({ error: revenueError.message }, { status: 400 });
+          return NextResponse.json({ error: publicErrorMessage(revenueError) }, { status: 400 });
         }
 
         if (!revenueExists) {
@@ -177,7 +178,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       .maybeSingle();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: publicErrorMessage(error) }, { status: 400 });
     }
 
     if (!data) {
@@ -192,7 +193,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     return NextResponse.json({ success: true, data });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown server error";
+    const message = publicErrorMessage(error, "서버 오류가 발생했습니다.");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -224,7 +225,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       .eq("id", id);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: publicErrorMessage(error) }, { status: 400 });
     }
 
     logInfo("DELETE_DEPOSIT", `입금 삭제: ${existing.depositor_name} ${existing.amount}원`, {
@@ -234,7 +235,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown server error";
+    const message = publicErrorMessage(error, "서버 오류가 발생했습니다.");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

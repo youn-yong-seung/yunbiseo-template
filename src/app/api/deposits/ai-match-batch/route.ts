@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { publicErrorMessage } from "@/lib/safe-error";
 import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
 import {
   normalizeBusinessName,
@@ -134,7 +135,7 @@ export async function POST() {
       .limit(500);
 
     if (depositsError) {
-      return NextResponse.json({ error: depositsError.message }, { status: 400 });
+      return NextResponse.json({ error: publicErrorMessage(depositsError) }, { status: 400 });
     }
 
     const pendingDeposits = (deposits ?? []) as DepositRow[];
@@ -158,7 +159,7 @@ export async function POST() {
       .limit(1000);
 
     if (revenuesError) {
-      return NextResponse.json({ error: revenuesError.message }, { status: 400 });
+      return NextResponse.json({ error: publicErrorMessage(revenuesError) }, { status: 400 });
     }
 
     const revenueRows = (revenues ?? []) as unknown as RevenueRow[];
@@ -370,7 +371,7 @@ export async function POST() {
     });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "AI 일괄 매칭 실패" },
+      { error: publicErrorMessage(error, "AI 일괄 매칭 실패") },
       { status: 500 }
     );
   }

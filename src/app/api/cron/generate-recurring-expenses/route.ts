@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { publicErrorMessage } from "@/lib/safe-error";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { validateApiKey } from "@/lib/api-key";
+import { validateApiKeyRecord } from "@/lib/api-key";
+import { verifyCronSecret } from "@/lib/route-auth";
 import { logInfo } from "@/lib/logger";
 
 /**
@@ -18,7 +20,10 @@ export async function GET(request: NextRequest) {
 
 async function handle(request: NextRequest) {
   try {
-    const valid = await validateApiKey(request);
+    // Vercel Cron(CRON_SECRET) 또는 관리자 API 키만 실행할 수 있다.
+    const cronOk = verifyCronSecret(request);
+    const key = cronOk ? null : await validateApiKeyRecord(request);
+    const valid = cronOk || Boolean(key?.employee.isAdmin);
     if (!valid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -36,7 +41,7 @@ async function handle(request: NextRequest) {
       .eq("day_of_month", today);
 
     if (fetchErr) {
-      return NextResponse.json({ error: fetchErr.message }, { status: 500 });
+      return NextResponse.json({ error: publicErrorMessage(fetchErr) }, { status: 500 });
     }
 
     const eligible = (templates ?? []).filter((tpl) => {
@@ -76,7 +81,8 @@ async function handle(request: NextRequest) {
         .single();
 
       if (insertErr) {
-        results.push({ template_id: tpl.id, error: insertErr.message });
+        console.error("[recurring-expenses]", insertErr.message);
+        results.push({ template_id: tpl.id, error: "매입을 만들지 못했습니다." });
         continue;
       }
 
@@ -103,7 +109,7 @@ async function handle(request: NextRequest) {
       results,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown server error";
+    const message = publicErrorMessage(error, "서버 오류가 발생했습니다.");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { publicErrorMessage } from "@/lib/safe-error";
 
 import { validateApiKey } from "@/lib/api-key";
 import { logError, logInfo } from "@/lib/logger";
@@ -246,7 +247,8 @@ async function createMeeting(
       .single();
 
     if (error || !data) {
-      return { error: error?.message ?? "Meeting insert failed", input };
+      if (error) console.error("[meetings] insert", error.message);
+      return { error: "미팅을 저장하지 못했습니다.", input };
     }
 
     const project =
@@ -314,7 +316,7 @@ async function createMeeting(
     };
   } catch (error) {
     return {
-      error: error instanceof Error ? error.message : "Unknown meeting create error",
+      error: publicErrorMessage(error, "미팅을 저장하지 못했습니다."),
       input,
     };
   }
@@ -361,7 +363,7 @@ export async function POST(request: NextRequest) {
     const hasError = results.some((result) => "error" in result);
     return NextResponse.json({ results }, { status: hasError ? 207 : 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown server error";
+    const message = publicErrorMessage(error, "서버 오류가 발생했습니다.");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

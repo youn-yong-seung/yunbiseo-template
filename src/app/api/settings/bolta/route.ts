@@ -1,4 +1,7 @@
-import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
+import { requireRouteAdmin } from "@/lib/route-auth";
+import { maskSecret, planSettingWrites } from "@/lib/secret-mask";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { publicErrorMessage } from "@/lib/safe-error";
 import { getSystemSettings } from "@/lib/system-settings";
 
 const BOLTA_SETTING_KEYS = [
@@ -13,18 +16,16 @@ function asTrimmedString(value: unknown) {
 }
 
 export async function GET() {
-  const { user, authUnavailable } = await requireRouteUser();
-  if (!user) {
-    return createRouteAuthErrorResponse(authUnavailable);
-  }
+  // 외부 서비스 키 설정은 관리자만 보고 바꾼다.
+  const auth = await requireRouteAdmin();
+  if (!auth.ok) return auth.response;
 
   const settings = await getSystemSettings([...BOLTA_SETTING_KEYS]);
 
   return Response.json({
-    api_key: settings.bolta_api_key ?? process.env.BOLTA_API_KEY ?? "",
-    customer_key: settings.bolta_customer_key ?? process.env.BOLTA_CUSTOMER_KEY ?? "",
-    webhook_secret:
-      settings.bolta_webhook_secret ?? process.env.BOLTA_WEBHOOK_SECRET ?? "",
+    api_key: maskSecret(settings.bolta_api_key ?? process.env.BOLTA_API_KEY),
+    customer_key: maskSecret(settings.bolta_customer_key ?? process.env.BOLTA_CUSTOMER_KEY),
+    webhook_secret: maskSecret(settings.bolta_webhook_secret ?? process.env.BOLTA_WEBHOOK_SECRET),
     supplier_manager_email:
       settings.bolta_supplier_manager_email ??
       process.env.BOLTA_SUPPLIER_MANAGER_EMAIL ??
@@ -33,11 +34,11 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  const { supabase, user, authUnavailable } = await requireRouteUser();
-  if (!user) {
-    return createRouteAuthErrorResponse(authUnavailable);
-  }
-  const body = await request.json();
+  // 외부 서비스 키 설정은 관리자만 보고 바꾼다.
+  const auth = await requireRouteAdmin();
+  if (!auth.ok) return auth.response;
+  const supabase = createAdminClient();
+  const body = (await request.json().catch(() => null)) ?? {};
 
   const values = {
     bolta_api_key: asTrimmedString(body.api_key),
@@ -46,16 +47,7 @@ export async function PUT(request: Request) {
     bolta_supplier_manager_email: asTrimmedString(body.supplier_manager_email),
   };
 
-  const upsertRows = Object.entries(values)
-    .filter(([, value]) => value)
-    .map(([key, value]) => ({
-      key,
-      value,
-      updated_at: new Date().toISOString(),
-    }));
-  const deleteKeys = Object.entries(values)
-    .filter(([, value]) => !value)
-    .map(([key]) => key);
+  const { upsertRows, deleteKeys } = planSettingWrites(values);
 
   if (upsertRows.length > 0) {
     const { error } = await supabase
@@ -63,7 +55,7 @@ export async function PUT(request: Request) {
       .upsert(upsertRows, { onConflict: "key" });
 
     if (error) {
-      return Response.json({ error: error.message }, { status: 500 });
+      return Response.json({ error: publicErrorMessage(error) }, { status: 500 });
     }
   }
 
@@ -74,7 +66,7 @@ export async function PUT(request: Request) {
       .in("key", deleteKeys);
 
     if (error) {
-      return Response.json({ error: error.message }, { status: 500 });
+      return Response.json({ error: publicErrorMessage(error) }, { status: 500 });
     }
   }
 

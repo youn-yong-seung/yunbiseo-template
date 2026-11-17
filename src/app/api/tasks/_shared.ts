@@ -56,3 +56,30 @@ export async function selectTask(supabase: Admin, id: string) {
   if (error) throw new Error(error.message);
   return data;
 }
+
+/**
+ * 할 일을 고치거나 지울 수 있는지: 관리자, 만든 사람, 담당자(assigned_to·공동 담당), 만든 사람 기록이 없는 옛 할 일.
+ * DB 정책 public.can_edit_task 와 같은 기준이다. 안 되면 Forbidden 을 던진다.
+ */
+export class Forbidden extends Error {}
+
+export async function assertCanEditTask(
+  supabase: Admin,
+  taskId: string,
+  employee: { id: string; isAdmin: boolean },
+) {
+  if (employee.isAdmin) return;
+  const { data: task } = await supabase
+    .from("tasks")
+    .select("created_by, assigned_to, task_assignees(employee_id)")
+    .eq("id", taskId)
+    .maybeSingle();
+  if (!task) return; // 없는 할 일은 뒤에서 404 로 처리한다.
+  const assignees = ((task.task_assignees ?? []) as { employee_id: string }[]).map((row) => row.employee_id);
+  const ok =
+    task.created_by === null ||
+    task.created_by === employee.id ||
+    task.assigned_to === employee.id ||
+    assignees.includes(employee.id);
+  if (!ok) throw new Forbidden("이 할 일은 만든 사람·담당자·관리자만 고치거나 지울 수 있습니다.");
+}

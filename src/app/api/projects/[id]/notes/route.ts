@@ -9,6 +9,7 @@ import {
   resolveActor,
   resolveProjectRef,
   unauthorized,
+  dbError,
 } from "@/lib/yb-api/refs";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       .select("id, title, content, link_url, author_name, created_at, updated_at")
       .eq("project_id", id)
       .order("created_at", { ascending: false });
-    if (error) throw new BadRequest(error.message);
+    if (error) throw dbError(error);
     return NextResponse.json({ success: true, data: data ?? [] });
   } catch (error) {
     return errorResponse(error);
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const [firstLine, ...rest] = text.split(/\r?\n/);
     const title = normalizeText(body.title) ?? firstLine.trim().slice(0, 100);
     const content = normalizeText(body.title) ? text : normalizeText(rest.join("\n"));
-    const actor = await resolveActor(supabase, apiKey.created_by);
+    const actor = await resolveActor(apiKey);
 
     const { data, error } = await supabase
       .from("project_notes")
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       })
       .select("id, title, content, author_name, created_at")
       .single();
-    if (error) throw new BadRequest(error.message);
+    if (error) throw dbError(error);
     return NextResponse.json({ success: true, data }, { status: 201 });
   } catch (error) {
     return errorResponse(error);

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { publicErrorMessage } from "@/lib/safe-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@supabase/supabase-js";
 import { logInfo, logError } from "@/lib/logger";
@@ -7,7 +8,13 @@ import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth
 // PATCH: 본인 비밀번호 변경
 export async function PATCH(request: NextRequest) {
   try {
-    const { current_password, new_password } = await request.json();
+    const { user, authUnavailable } = await requireRouteUser();
+
+    if (!user) {
+      return createRouteAuthErrorResponse(authUnavailable);
+    }
+
+    const { current_password, new_password } = (await request.json().catch(() => null)) ?? {};
 
     if (!current_password || !new_password) {
       return NextResponse.json(
@@ -16,18 +23,13 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    if (new_password.length < 6) {
+    if (typeof new_password !== "string" || new_password.length < 8 || new_password.length > 128) {
       return NextResponse.json(
-        { error: "새 비밀번호는 6자 이상이어야 합니다" },
+        { error: "새 비밀번호는 8자 이상이어야 합니다" },
         { status: 400 }
       );
     }
 
-    const { user, authUnavailable } = await requireRouteUser();
-
-    if (!user) {
-      return createRouteAuthErrorResponse(authUnavailable);
-    }
 
     if (!user.email) {
       return NextResponse.json({ error: "인증된 이메일이 없습니다" }, { status: 400 });
@@ -62,7 +64,7 @@ export async function PATCH(request: NextRequest) {
         resource: "employee",
         details: { auth_uid: user.id },
       });
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: publicErrorMessage(error) }, { status: 400 });
     }
 
     await adminSupabase

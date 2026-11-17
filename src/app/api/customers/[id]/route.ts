@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateApiKeyRecord } from "@/lib/api-key";
 import { logInfo } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { BadRequest, NotFound, errorResponse, unauthorized } from "@/lib/yb-api/refs";
+import { BadRequest, NotFound, errorResponse, unauthorized, dbError } from "@/lib/yb-api/refs";
 import { CUSTOMER_SELECT, pickCustomerFields } from "../_shared";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       .select(CUSTOMER_SELECT)
       .eq("id", id)
       .maybeSingle();
-    if (error) throw new BadRequest(error.message);
+    if (error) throw dbError(error);
     if (!data) throw new NotFound("Customer not found");
     return NextResponse.json({ data });
   } catch (error) {
@@ -39,7 +39,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       .eq("id", id)
       .select(CUSTOMER_SELECT)
       .maybeSingle();
-    if (error) throw new BadRequest(error.message);
+    if (error) throw dbError(error);
     if (!data) throw new NotFound("Customer not found");
 
     logInfo("UPDATE_CUSTOMER_API", `외부 API 고객 수정: ${data.name}`, {
