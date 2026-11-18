@@ -18,10 +18,11 @@ export function hashUserCode(value: string): string {
   return createHash("sha256").update(`yb-user-code:${normalizeUserCode(value)}`).digest("hex");
 }
 
+/** 길이가 달라도 같은 시간 비교(해시로 길이를 맞춘 뒤 timingSafeEqual). */
 export function sameHash(a: string, b: string): boolean {
-  const x = Buffer.from(a);
-  const y = Buffer.from(b);
-  return x.length === y.length && timingSafeEqual(x, y);
+  const x = createHash("sha256").update(a).digest();
+  const y = createHash("sha256").update(b).digest();
+  return timingSafeEqual(x, y) && a.length === b.length;
 }
 
 export const CLI_KEY_DAYS = 90;

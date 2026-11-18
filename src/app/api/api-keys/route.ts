@@ -59,6 +59,10 @@ export async function POST(request: NextRequest) {
     if (!name) {
       return NextResponse.json({ error: "name is required" }, { status: 400 });
     }
+    // "yb-cli " 로 시작하는 이름은 yb login 키(90일 만료) 전용이다(DB 제약: 만료일 필수).
+    if (/^yb-cli /i.test(name)) {
+      return NextResponse.json({ error: "'yb-cli' 로 시작하는 이름은 쓸 수 없습니다. 다른 이름을 지어 주세요." }, { status: 400 });
+    }
 
     let issued;
     try {

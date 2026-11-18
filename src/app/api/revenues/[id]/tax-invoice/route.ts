@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { publicErrorMessage } from "@/lib/safe-error";
+import { isPublicErrorMessage, publicErrorMessage } from "@/lib/safe-error";
 import { NextResponse } from "next/server";
 
 import {
@@ -128,6 +128,38 @@ function getStateBlockedReasons(taxInvoiceState: string) {
   return [];
 }
 
+/**
+ * 요청 본문으로 바꿀 수 없는 칸을 서버 값으로 되돌린다.
+ * - 품목 수·수량·단가·공급가액·세액: 매출에 저장된 금액에서만 나온다(본문으로 금액을 바꿔 발행하지 못하게).
+ * - 공급자(우리 회사) 사업자번호·상호·대표자: 서버에 설정돼 있으면(quotation-constants) 그 값만 쓴다.
+ *   설정이 비어 있는 템플릿 기본 상태에서는 화면에서 넣은 값을 쓴다.
+ * 날짜·용도·설명·품목명, 공급받는자 정보·담당자 연락처처럼 비어 있으면 채워야 하는 칸은 화면 값을 받는다.
+ */
+function lockServerTaxInvoiceFields(
+  merged: BoltaTaxInvoiceIssueRequest,
+  server: BoltaTaxInvoiceIssueRequest
+): BoltaTaxInvoiceIssueRequest {
+  return {
+    ...merged,
+    supplier: {
+      ...merged.supplier,
+      identificationNumber: server.supplier.identificationNumber || merged.supplier.identificationNumber,
+      organizationName: server.supplier.organizationName || merged.supplier.organizationName,
+      representativeName: server.supplier.representativeName || merged.supplier.representativeName,
+    },
+    items: server.items.map((serverItem, index) => {
+      const edited = merged.items[index] ?? serverItem;
+      return {
+        ...edited,
+        quantity: serverItem.quantity,
+        unitPrice: serverItem.unitPrice,
+        supplyCost: serverItem.supplyCost,
+        tax: serverItem.tax,
+      };
+    }),
+  };
+}
+
 function getPreviewOverride(body: unknown) {
   if (!body || typeof body !== "object" || !("preview" in body)) {
     return null;
@@ -224,7 +256,9 @@ async function syncRevenueTaxInvoiceStatus(revenue: RevenueIssueRecord) {
   if (!issuanceKey) {
     return {
       resolved: false,
-      message: statusMessage ?? "Bolta에서 아직 발행 키를 반환하지 않았습니다.",
+      message:
+        (statusMessage && isPublicErrorMessage(statusMessage) ? statusMessage : null) ??
+        "Bolta에서 아직 발행 키를 반환하지 않았습니다.",
       data: await selectUpdatedRevenue(revenue.id),
     };
   }
@@ -797,9 +831,10 @@ export async function POST(request: Request, context: RouteContext) {
       );
     }
 
-    const preview = mergeTaxInvoicePreview(
-      basePreview,
-      getPreviewOverride(requestBody)
+    // 화면에서 고친 값은 설명·연락처 같은 칸만 받는다. 금액·수량·품목 수·공급자 사업자 정보는 서버 값만 쓴다.
+    const preview = lockServerTaxInvoiceFields(
+      mergeTaxInvoicePreview(basePreview, getPreviewOverride(requestBody)),
+      basePreview
     );
     const missingFields = getTaxInvoicePreviewMissingFields(preview);
 
@@ -819,7 +854,9 @@ export async function POST(request: Request, context: RouteContext) {
     const clientReferenceId = makeClientReferenceId(revenue.id);
     const issueRequestedAt = new Date().toISOString();
 
-    const { error: pendingError } = await admin
+    // 발행 전에 상태를 먼저 "발행중"으로 선점한다. 발행중·발행완료·발행불필요가 아닌 행만 바뀌므로
+    // 동시에 두 번 눌러도 한 요청만 볼타로 간다(0행이면 409).
+    const { data: claimed, error: pendingError } = await admin
       .from("revenues")
       .update({
         tax_invoice_issue_status: "issuing",
@@ -830,10 +867,20 @@ export async function POST(request: Request, context: RouteContext) {
         tax_invoice_error_message: null,
         tax_invoice_request_payload: preview,
       })
-      .eq("id", revenue.id);
+      .eq("id", revenue.id)
+      .or("tax_invoice_issue_status.is.null,tax_invoice_issue_status.not.in.(issuing,issued)")
+      .not("is_tax_invoice_issued", "is", true)
+      .not("tax_invoice_not_required", "is", true)
+      .select("id");
 
     if (pendingError) {
       throw new Error(pendingError.message);
+    }
+    if (!claimed || claimed.length === 0) {
+      return NextResponse.json(
+        { error: "세금계산서 발행이 이미 진행 중이거나 끝났습니다.", data: await selectRevenueWithProject(id) },
+        { status: 409 }
+      );
     }
 
     try {
@@ -924,11 +971,10 @@ export async function POST(request: Request, context: RouteContext) {
       }
 
       const errorCode = error instanceof BoltaApiError ? error.code : null;
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "세금계산서 발행 요청 중 오류가 발생했습니다.";
+      // 볼타가 준 한국어 안내는 보여 주고, DB·네트워크 오류 원문은 서버 로그에만 남긴다.
+      const errorMessage = publicErrorMessage(error, "세금계산서 발행 요청 중 오류가 발생했습니다.");
 
+      // 선점한 "발행중"을 실패로 되돌린다(이 요청이 선점한 건만).
       await admin
         .from("revenues")
         .update({
@@ -937,7 +983,9 @@ export async function POST(request: Request, context: RouteContext) {
           tax_invoice_error_code: errorCode,
           tax_invoice_error_message: errorMessage,
         })
-        .eq("id", revenue.id);
+        .eq("id", revenue.id)
+        .eq("tax_invoice_client_reference_id", clientReferenceId)
+        .eq("tax_invoice_issue_status", "issuing");
 
       logError("FAIL_REVENUE_TAX_INVOICE", `세금계산서 발행 요청 실패: ${revenue.title}`, {
         resource: "revenue",

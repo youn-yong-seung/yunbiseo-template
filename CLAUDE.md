@@ -118,9 +118,11 @@
    - 이어서 `supabase db push --yes` 를 실행한다(`--yes` 로 확인 프롬프트 자동 통과). 테이블 30개와 정책이 생성된다.
    - (기존 프로젝트를 골랐고 비밀번호를 모르면) 이때만 사용자에게 한 번 입력받아 `.env.local` 에 저장한 뒤 진행한다.
    - `project not ready`/연결 오류면 프로젝트 준비(1~2분)를 기다렸다가, 또는 login/link 를 재확인 후 재시도한다.
-5-2. **보안 설정 두 가지 (사용자가 대시보드에서)** — `SETUP.md` 3-2 를 그대로 안내한다:
+5-2. **보안 설정 (사용자가 대시보드에서)** — `SETUP.md` 3-2 를 그대로 안내한다:
    ① Authentication → Sign In / Providers → "Allow new users to sign up" 끄기,
-   ② Authentication → Hooks → Customize Access Token (JWT) Claims → Postgres / public / `custom_access_token_hook`.
+   ② Authentication → Hooks → Customize Access Token (JWT) Claims → Postgres / public / `custom_access_token_hook`,
+   ③ 최소 비밀번호 길이 10 이상, (Pro 요금제면) 유출 비밀번호 차단 켜기,
+   ④ 배포한다면 3-3 Turnstile(CAPTCHA) 켜기.
    화면 위치를 하나씩 말해 주고, 끝났는지 확인한 뒤 다음으로 간다(건너뛰어도 앱은 동작하지만 꼭 하도록 권한다).
 6. **첫 관리자 생성** — 이 앱은 **회원가입 화면이 없다.** 로그인 계정은 이 단계로 만드는 관리자 1개로 시작한다.
    `npm run setup:admin` 을 실행하면 ID `admin` 과 **무작위 비밀번호**(예: `jadong-k7m2-x9qp`)가 만들어지고 한 번만 출력된다.

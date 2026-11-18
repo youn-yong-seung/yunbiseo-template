@@ -1,46 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { uploadFile, updateFileContent } from "@/lib/google-drive";
+import { assertInsideAllowedRoots, DriveAccessError } from "@/lib/google-drive";
+import { buildFileContent, saveMeetingFile } from "@/lib/meeting-drive";
 import { logInfo } from "@/lib/logger";
 import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-
-function buildFileContent(meeting: {
-  title: string;
-  summary: string;
-  transcript: string;
-  started_at: string;
-  ended_at: string | null;
-}) {
-  const lines: string[] = [];
-
-  lines.push(`# ${meeting.title}`);
-  lines.push("");
-  lines.push(`일시: ${new Date(meeting.started_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`);
-  if (meeting.ended_at) {
-    lines.push(`종료: ${new Date(meeting.ended_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`);
-  }
-
-  if (meeting.summary?.trim()) {
-    lines.push("");
-    lines.push("---");
-    lines.push("");
-    lines.push("## 요약");
-    lines.push("");
-    lines.push(meeting.summary.trim());
-  }
-
-  if (meeting.transcript?.trim()) {
-    lines.push("");
-    lines.push("---");
-    lines.push("");
-    lines.push("## 전사록");
-    lines.push("");
-    lines.push(meeting.transcript.trim());
-  }
-
-  lines.push("");
-  return lines.join("\n");
-}
 
 /**
  * 미팅 전사록/요약본을 연결된 프로젝트의 Drive 폴더에 파일로 저장합니다.
@@ -96,27 +60,21 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(content, "utf-8");
     const fileName = `${meeting.title}.txt`;
 
-    let fileId: string | null = null;
-
-    if (meeting.drive_file_id) {
-      // 기존 파일 업데이트
-      try {
-        const updated = await updateFileContent(meeting.drive_file_id, "text/plain", buffer);
-        fileId = updated.id ?? meeting.drive_file_id;
-      } catch {
-        // 파일이 삭제됐을 수 있으므로 새로 생성
-        const uploaded = await uploadFile(project.drive_folder_id, fileName, "text/plain", buffer);
-        fileId = uploaded.id ?? null;
+    // 저장할 폴더가 윤비서 Drive 최상위 폴더 안인지 확인한다(밖이면 거부).
+    try {
+      await assertInsideAllowedRoots([project.drive_folder_id]);
+    } catch (error) {
+      if (error instanceof DriveAccessError) {
+        return NextResponse.json({ error: "프로젝트 Drive 폴더가 윤비서 Drive 폴더 밖에 있어 저장하지 않았습니다." }, { status: 403 });
       }
-    } else {
-      // 새 파일 생성
-      const uploaded = await uploadFile(project.drive_folder_id, fileName, "text/plain", buffer);
-      fileId = uploaded.id ?? null;
+      throw error;
     }
 
-    // drive_file_id 저장
+    const fileId = await saveMeetingFile(meeting.drive_file_id, project.drive_folder_id, fileName, buffer);
+
+    // drive_file_id 는 서버만 쓴다(직원 브라우저 쓰기는 DB 트리거가 막는다).
     if (fileId && fileId !== meeting.drive_file_id) {
-      await supabase
+      await createAdminClient()
         .from("meetings")
         .update({ drive_file_id: fileId })
         .eq("id", meetingId);

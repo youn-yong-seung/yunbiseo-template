@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import type { ProjectNote } from "@/lib/types";
+import { privateFilePath } from "@/lib/private-files";
 
 export interface ProjectNoteEditorValues {
   title: string;
@@ -261,12 +262,8 @@ export function ProjectNoteDialog({
           return;
         }
 
-        const { data } = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(path);
-        const publicUrl = data?.publicUrl;
-        if (!publicUrl) {
-          toast.error("이미지 주소를 가져오지 못했습니다.");
-          return;
-        }
+        // 버킷은 비공개다. 본문에는 로그인한 직원만 열 수 있는 윤비서 주소를 넣는다.
+        const publicUrl = privateFilePath(IMAGE_BUCKET, path);
 
         const img = document.createElement("img");
         img.src = publicUrl;

@@ -18,6 +18,7 @@ export async function POST(request: Request) {
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("Meeting AI match error:", msg, error);
-    return Response.json({ error: `AI 매칭 실패: ${msg}` }, { status: 500 });
+    // 외부 AI·DB 오류 원문은 서버 로그에만 남긴다.
+    return Response.json({ error: "AI 매칭에 실패했습니다. 잠시 뒤 다시 시도하세요." }, { status: 500 });
   }
 }

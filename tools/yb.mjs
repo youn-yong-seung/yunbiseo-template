@@ -41,7 +41,7 @@ const STUDENT_COMMANDS = {
   expense: ["list", "get", "create", "update"],
   deposit: ["list", "get", "create", "update", "delete"],
   revenue: ["list", "get", "create", "update", "tax-invoice"],
-  card: ["list", "get", "create", "update", "delete"],
+  card: ["list", "get", "create", "update", "delete", "receipt"],
   meeting: ["create"],
   today: true,
   schedule: ["list", "get", "create", "update", "delete"],
@@ -177,6 +177,7 @@ const RECEIPT_CONTENT_TYPES = {
 const MAX_RECEIPT_BYTES = 10 * 1024 * 1024;
 
 // 웹과 같은 경로: /api/receipts 에서 1회용 업로드 주소를 받아 파일을 올리고, 카드 건의 receipt_url 을 바꾼다.
+// (수강생판 템플릿의 /api/receipts 는 비공개 버킷에 올리고, publicUrl 로 로그인한 직원만 열 수 있는 윤비서 주소를 준다)
 async function uploadCardReceipt(id, localPath) {
   if (!id || !localPath) fail("사용법: yb card receipt <카드내역id> <영수증파일>");
   if (!fs.existsSync(localPath)) fail(`파일 없음: ${localPath}`);
@@ -1129,6 +1130,7 @@ const STUDENT_HELP = `yb — 윤비서 CLI (수강생판, AI 에이전트 친화
   yb card update <id> --description "고객 미팅 커피 3잔" [--status confirmed|ignored]   적요 적기
   yb card create --amount 금액 --merchant 가맹점 [--approved-at YYYY-MM-DD] [--last4 1234] [--description]   문자로 안 들어온 건 손으로 넣기
   yb card delete <id>
+  yb card receipt <id> <영수증 파일>   영수증(jpg/png/gif/webp/pdf, 10MB 이하)을 올리고 그 카드 건에 연결 (직원만 열 수 있는 주소)
 `;
 
 const UPDATE_HELP = {

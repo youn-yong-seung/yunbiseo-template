@@ -1,46 +1,10 @@
 import { NextResponse } from "next/server";
-import { uploadFile, updateFileContent } from "@/lib/google-drive";
+import { assertInsideAllowedRoots } from "@/lib/google-drive";
+import { buildFileContent, saveMeetingFile } from "@/lib/meeting-drive";
 import { logInfo } from "@/lib/logger";
 import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-
-function buildFileContent(meeting: {
-  title: string;
-  summary: string;
-  transcript: string;
-  started_at: string;
-  ended_at: string | null;
-}) {
-  const lines: string[] = [];
-
-  lines.push(`# ${meeting.title}`);
-  lines.push("");
-  lines.push(`일시: ${new Date(meeting.started_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`);
-  if (meeting.ended_at) {
-    lines.push(`종료: ${new Date(meeting.ended_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`);
-  }
-
-  if (meeting.summary?.trim()) {
-    lines.push("");
-    lines.push("---");
-    lines.push("");
-    lines.push("## 요약");
-    lines.push("");
-    lines.push(meeting.summary.trim());
-  }
-
-  if (meeting.transcript?.trim()) {
-    lines.push("");
-    lines.push("---");
-    lines.push("");
-    lines.push("## 전사록");
-    lines.push("");
-    lines.push(meeting.transcript.trim());
-  }
-
-  lines.push("");
-  return lines.join("\n");
-}
 
 /**
  * 프로젝트에 연결된 모든 미팅의 전사록/요약본을 Drive 폴더에 일괄 저장합니다.
@@ -79,6 +43,19 @@ export async function POST() {
     }
 
     const results = { synced: 0, skipped: 0, errors: [] as string[] };
+    const admin = createAdminClient();
+    const folderChecks = new Map<string, boolean>();
+    const folderInside = async (folderId: string) => {
+      if (!folderChecks.has(folderId)) {
+        try {
+          await assertInsideAllowedRoots([folderId]);
+          folderChecks.set(folderId, true);
+        } catch {
+          folderChecks.set(folderId, false);
+        }
+      }
+      return folderChecks.get(folderId) === true;
+    };
 
     for (const meeting of meetings ?? []) {
       try {
@@ -94,27 +71,21 @@ export async function POST() {
           continue;
         }
 
+        // 폴더가 윤비서 Drive 최상위 폴더 밖이면 건너뛴다.
+        if (!(await folderInside(folderId))) {
+          results.skipped++;
+          results.errors.push(`${meeting.title}: 프로젝트 Drive 폴더가 윤비서 Drive 폴더 밖에 있어 건너뛰었습니다.`);
+          continue;
+        }
+
         const content = buildFileContent(meeting);
         const buffer = Buffer.from(content, "utf-8");
         const fileName = `${meeting.title}.txt`;
 
-        let fileId: string | null = null;
-
-        if (meeting.drive_file_id) {
-          try {
-            const updated = await updateFileContent(meeting.drive_file_id, "text/plain", buffer);
-            fileId = updated.id ?? meeting.drive_file_id;
-          } catch {
-            const uploaded = await uploadFile(folderId, fileName, "text/plain", buffer);
-            fileId = uploaded.id ?? null;
-          }
-        } else {
-          const uploaded = await uploadFile(folderId, fileName, "text/plain", buffer);
-          fileId = uploaded.id ?? null;
-        }
+        const fileId = await saveMeetingFile(meeting.drive_file_id, folderId, fileName, buffer);
 
         if (fileId && fileId !== meeting.drive_file_id) {
-          await supabase
+          await admin
             .from("meetings")
             .update({ drive_file_id: fileId })
             .eq("id", meeting.id);
@@ -122,7 +93,9 @@ export async function POST() {
 
         results.synced++;
       } catch (err) {
-        results.errors.push(`${meeting.title}: ${err instanceof Error ? err.message : String(err)}`);
+        // 외부(Drive)·DB 오류 원문은 서버 로그에만 남긴다.
+        console.error("[drive-sync-all]", meeting.id, err instanceof Error ? err.message : err);
+        results.errors.push(`${meeting.title}: 저장하지 못했습니다.`);
       }
     }
 

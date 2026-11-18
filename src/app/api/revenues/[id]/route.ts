@@ -41,12 +41,23 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     // 볼타로 발행 중이거나 발행된 건은 손으로 발행 여부를 바꾸지 않는다(국세청 기록과 어긋난다).
     const boltaTracked = current.tax_invoice_issue_status === "issuing" || current.tax_invoice_issue_status === "issued";
-    if (boltaTracked && ("is_tax_invoice_issued" in fields || amounts)) {
-      throw new BadRequest("볼타로 발행(중)인 매출은 금액이나 발행 여부를 바꿀 수 없습니다");
+    const taxInvoiceFieldTouched = ["is_tax_invoice_issued", "tax_invoice_date", "tax_invoice_not_required"].some(
+      (key) => key in fields
+    );
+    if (boltaTracked && (taxInvoiceFieldTouched || amounts)) {
+      throw new BadRequest("볼타로 발행(중)인 매출은 금액·발행 여부·발행일을 바꿀 수 없습니다");
     }
 
-    const { error } = await supabase.from("revenues").update(fields).eq("id", id);
+    let updateQuery = supabase.from("revenues").update(fields).eq("id", id);
+    // 확인한 뒤 그 사이 볼타 발행이 시작돼도 금액·발행 칸은 바뀌지 않게 같은 조건을 update 에도 건다.
+    if (taxInvoiceFieldTouched || amounts) {
+      updateQuery = updateQuery.or("tax_invoice_issue_status.is.null,tax_invoice_issue_status.not.in.(issuing,issued)");
+    }
+    const { data: updated, error } = await updateQuery.select("id");
     if (error) throw dbError(error);
+    if (!updated || updated.length === 0) {
+      throw new BadRequest("볼타로 발행(중)인 매출은 금액·발행 여부·발행일을 바꿀 수 없습니다");
+    }
 
     const data = await selectRevenue(supabase, id);
     logInfo("UPDATE_REVENUE_API", `외부 API 매출 수정: ${data.title}`, {

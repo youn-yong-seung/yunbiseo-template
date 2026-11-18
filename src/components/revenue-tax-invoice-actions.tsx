@@ -482,6 +482,7 @@ function IssuePreviewDialog({
           <TaxInvoiceDraftForm
             issueDraft={issueDraft}
             setIssueDraft={setIssueDraft}
+            supplierLocked={Boolean(issuePreview.preview?.supplier?.identificationNumber)}
             previewBlockedReasons={previewBlockedReasons}
           />
         ) : null}
@@ -508,7 +509,9 @@ function TaxInvoiceDraftForm({
   issueDraft,
   setIssueDraft,
   previewBlockedReasons,
+  supplierLocked,
 }: {
+  supplierLocked: boolean;
   issueDraft: TaxInvoicePreview;
   setIssueDraft: Dispatch<SetStateAction<TaxInvoicePreview | null>>;
   previewBlockedReasons: string[];
@@ -627,6 +630,8 @@ function TaxInvoiceDraftForm({
                 <Label htmlFor={`issue-item-quantity-${index}`} className="text-right text-sm text-muted-foreground">수량</Label>
                 <Input
                   id={`issue-item-quantity-${index}`}
+                  readOnly
+                  title="금액·수량은 매출 정보에서 고칩니다"
                   type="number"
                   min="1"
                   value={item.quantity ?? 1}
@@ -654,6 +659,8 @@ function TaxInvoiceDraftForm({
                 <Label htmlFor={`issue-item-supply-${index}`} className="text-right text-sm text-muted-foreground">공급가액</Label>
                 <Input
                   id={`issue-item-supply-${index}`}
+                  readOnly
+                  title="금액·수량은 매출 정보에서 고칩니다"
                   inputMode="numeric"
                   value={formatNumber(item.supplyCost)}
                   onChange={(event) =>
@@ -684,6 +691,8 @@ function TaxInvoiceDraftForm({
                 <Label htmlFor={`issue-item-tax-${index}`} className="text-right text-sm text-muted-foreground">세액</Label>
                 <Input
                   id={`issue-item-tax-${index}`}
+                  readOnly
+                  title="금액·수량은 매출 정보에서 고칩니다"
                   inputMode="numeric"
                   value={formatNumber(item.tax ?? 0)}
                   onChange={(event) =>
@@ -732,6 +741,7 @@ function TaxInvoiceDraftForm({
       <PartyFieldset
         title="공급자"
         idPrefix="supplier"
+        identityLocked={supplierLocked}
         party={issueDraft.supplier}
         manager={issueDraft.supplier.manager}
         onChange={(patch) =>
@@ -789,9 +799,12 @@ function PartyFieldset({
   manager,
   onChange,
   onManagerChange,
+  identityLocked = false,
 }: {
   title: string;
   idPrefix: string;
+  /** 사업자번호·상호·대표자는 설정값만 쓴다(서버도 본문 값을 무시한다). */
+  identityLocked?: boolean;
   party: {
     identificationNumber: string;
     organizationName: string;
@@ -813,6 +826,7 @@ function PartyFieldset({
         <Label htmlFor={`${idPrefix}-business-number`} className="text-right text-sm text-muted-foreground">사업자번호</Label>
         <Input
           id={`${idPrefix}-business-number`}
+          readOnly={identityLocked}
           placeholder="000-00-00000"
           value={formatBusinessNumber(party.identificationNumber)}
           onChange={(event) =>
@@ -822,12 +836,14 @@ function PartyFieldset({
         <Label htmlFor={`${idPrefix}-organization-name`} className="text-right text-sm text-muted-foreground">상호</Label>
         <Input
           id={`${idPrefix}-organization-name`}
+          readOnly={identityLocked}
           value={party.organizationName}
           onChange={(event) => onChange({ organizationName: event.target.value })}
         />
         <Label htmlFor={`${idPrefix}-representative-name`} className="text-right text-sm text-muted-foreground">대표자명</Label>
         <Input
           id={`${idPrefix}-representative-name`}
+          readOnly={identityLocked}
           value={party.representativeName}
           onChange={(event) => onChange({ representativeName: event.target.value })}
         />

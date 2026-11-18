@@ -50,7 +50,10 @@ export async function POST(request: NextRequest) {
     const status = body.status !== undefined ? parseProjectStatus(body.status) : "진행예정";
 
     const { data: projectNumber, error: numberError } = await supabase.rpc("generate_project_number");
-    if (numberError || !projectNumber) throw new Error(numberError?.message ?? "프로젝트 번호를 만들지 못했습니다");
+    if (numberError || !projectNumber) {
+      if (numberError) console.error("[projects] generate_project_number", numberError.message);
+      throw new BadRequest("프로젝트 번호를 만들지 못했습니다");
+    }
 
     // 처음 단계도 바꾼 사람과 함께 남기려고 '진행예정'으로 만든 뒤 필요하면 단계를 바꾼다.
     const { data: inserted, error } = await supabase
@@ -58,7 +61,8 @@ export async function POST(request: NextRequest) {
       .insert({ ...fields, project_number: projectNumber, status: "진행예정" })
       .select("id")
       .single();
-    if (error || !inserted) throw new BadRequest(error?.message ?? "Project insert failed");
+    if (error) throw dbError(error);
+    if (!inserted) throw new BadRequest("프로젝트를 저장하지 못했습니다.");
 
     if (fields.manager !== undefined) {
       await syncProjectAssignees(supabase, inserted.id, fields.manager as string | null);

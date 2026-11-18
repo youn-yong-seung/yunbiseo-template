@@ -117,10 +117,15 @@ function mrkdwn(text: string): SlackBlock {
   };
 }
 
+/**
+ * 마크다운 → 슬랙 mrkdwn. 입력은 slackEscape 를 거친 값이어야 한다.
+ * 마크다운 링크 [글자](주소)는 슬랙 링크(<주소|글자>)로 만들지 않고 "글자 (주소)"로 풀어 쓴다.
+ * 회의 요약에 넣은 글자가 다른 주소를 그럴듯한 이름으로 가리는 링크를 만들지 못하게 한다.
+ */
 export function convertMarkdownToSlackMrkdwn(markdown: string) {
   return markdown
     .replace(/\r\n?/g, "\n")
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, "<$2|$1>")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, "$1 ($2)")
     .replace(/```[a-zA-Z0-9_-]*\n([\s\S]*?)```/g, (_, code: string) => `\`\`\`\n${code.trimEnd()}\n\`\`\``)
     .replace(/^#{1,6}\s+(.+)$/gm, (_, title: string) => `*${title.trim()}*`)
     .replace(/^(\s*)[-*+]\s+\[ \]\s+(.+)$/gm, (_, indent: string, text: string) => {

@@ -1,7 +1,6 @@
-import { timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { exchangeCode } from "@/lib/gmail";
-import { requireRouteUser } from "@/lib/route-auth";
+import { requireRouteUser, safeEqual } from "@/lib/route-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const OAUTH_STATE_COOKIE = "yb_google_oauth_state";
@@ -13,8 +12,9 @@ function redirectToMail(request: NextRequest, error: string) {
 }
 
 function sameState(a: string | null | undefined, b: string | null | undefined) {
-  if (!a || !b || a.length !== b.length) return false;
-  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  // 길이와 무관하게 같은 시간 비교(safeEqual: 해시로 맞춘 뒤 timingSafeEqual).
+  if (!a || !b) return false;
+  return safeEqual(a, b);
 }
 
 /**

@@ -92,7 +92,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     const { id } = await context.params;
     const body = (await request.json().catch(() => null)) ?? {};
-    if (!apiKey.employee.isAdmin && !apiKey.employee.is_finance) {
+    const privileged = apiKey.employee.isAdmin || apiKey.employee.is_finance;
+    if (!privileged) {
       const { data: current } = await createAdminClient().from("expenses").select("status").eq("id", id).maybeSingle();
       if (current && LOCKED_STATUSES.includes(current.status as string)) {
         return forbiddenResponse("승인·지급·취소된 매입은 관리자 또는 재무 담당만 고치거나 지울 수 있습니다.");
@@ -327,18 +328,22 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const { data, error } = await supabase
-      .from("expenses")
-      .update(update)
-      .eq("id", id)
-      .select(SELECT_COLUMNS)
-      .maybeSingle();
+    let updateQuery = supabase.from("expenses").update(update).eq("id", id);
+    // 관리자·재무가 아니면 "잠기지 않은 상태일 때만" 바꾼다. 위에서 상태를 읽은 뒤 승인돼도 이 조건에서 0행이 된다.
+    if (!privileged) updateQuery = updateQuery.not("status", "in", `(${LOCKED_STATUSES.join(",")})`);
+    const { data, error } = await updateQuery.select(SELECT_COLUMNS).maybeSingle();
 
     if (error) {
       return NextResponse.json({ error: publicErrorMessage(error) }, { status: 400 });
     }
 
     if (!data) {
+      if (!privileged) {
+        return NextResponse.json(
+          { error: "매입이 없거나, 그 사이 승인·지급·취소돼 관리자 또는 재무 담당만 고칠 수 있습니다." },
+          { status: 409 }
+        );
+      }
       return NextResponse.json({ error: "Expense not found" }, { status: 404 });
     }
 
@@ -363,7 +368,8 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     }
 
     const { id } = await context.params;
-    if (!apiKey.employee.isAdmin && !apiKey.employee.is_finance) {
+    const privileged = apiKey.employee.isAdmin || apiKey.employee.is_finance;
+    if (!privileged) {
       const { data: current } = await createAdminClient().from("expenses").select("status").eq("id", id).maybeSingle();
       if (current && LOCKED_STATUSES.includes(current.status as string)) {
         return forbiddenResponse("승인·지급·취소된 매입은 관리자 또는 재무 담당만 고치거나 지울 수 있습니다.");
@@ -381,13 +387,18 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Expense not found" }, { status: 404 });
     }
 
-    const { error } = await supabase
-      .from("expenses")
-      .delete()
-      .eq("id", id);
+    let deleteQuery = supabase.from("expenses").delete().eq("id", id);
+    if (!privileged) deleteQuery = deleteQuery.not("status", "in", `(${LOCKED_STATUSES.join(",")})`);
+    const { data: deleted, error } = await deleteQuery.select("id");
 
     if (error) {
       return NextResponse.json({ error: publicErrorMessage(error) }, { status: 400 });
+    }
+    if (!deleted || deleted.length === 0) {
+      return NextResponse.json(
+        { error: "그 사이 승인·지급·취소돼 관리자 또는 재무 담당만 지울 수 있습니다." },
+        { status: 409 }
+      );
     }
 
     logInfo("DELETE_EXPENSE", `매입 삭제: ${existing.title} ${existing.total_amount}원`, {

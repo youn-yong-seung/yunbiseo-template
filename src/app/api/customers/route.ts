@@ -60,7 +60,8 @@ export async function POST(request: NextRequest) {
       .insert({ ...pickCustomerFields(body), name })
       .select(CUSTOMER_SELECT)
       .single();
-    if (error || !data) throw new BadRequest(error?.message ?? "Insert failed");
+    if (error) throw dbError(error);
+    if (!data) throw new BadRequest("고객을 저장하지 못했습니다.");
 
     logInfo("CREATE_CUSTOMER_API", `외부 API 고객 등록: ${name}`, {
       resource: "customer",

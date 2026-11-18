@@ -96,7 +96,7 @@ export async function POST(request: Request) {
       const msg = aiError instanceof Error ? aiError.message : String(aiError);
       console.error("Anthropic API error:", msg);
       return Response.json(
-        { error: `AI API 호출 실패: ${msg}` },
+        { error: "AI 호출에 실패했습니다. 잠시 뒤 다시 시도하세요." },
         { status: 502 }
       );
     }
@@ -130,7 +130,7 @@ export async function POST(request: Request) {
       parsed = JSON.parse(jsonStr);
     } catch {
       return Response.json(
-        { error: "AI 응답을 파싱할 수 없습니다.", raw: rawText },
+        { error: "AI 응답을 읽지 못했습니다. 다시 시도하세요." },
         { status: 422 }
       );
     }
@@ -240,7 +240,7 @@ export async function POST(request: Request) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("Quotation AI generate error:", msg, error);
     return Response.json(
-      { error: `AI 견적 생성 실패: ${msg}` },
+      { error: "AI 견적 생성에 실패했습니다." },
       { status: 500 }
     );
   }

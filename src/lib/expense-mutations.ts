@@ -7,6 +7,8 @@ import { sendExpenseSlackNotification } from "@/lib/slack";
 import { logInfo } from "@/lib/logger";
 import type { ExpenseStatus, VendorTaxCategory } from "@/lib/types";
 
+export const STATUS_CHANGED_MESSAGE = "다른 요청이 먼저 이 매입의 상태를 바꿨습니다. 새로 고침한 뒤 다시 시도하세요.";
+
 const EXPENSE_MUTATION_SELECT =
   "id, title, status, total_amount, withholding_amount, net_payment_amount, tax_category, vendor_id, purchase_date, payment_date, slack_thread_ts";
 
@@ -108,11 +110,13 @@ export async function submitExpense(expenseId: string, ctx: MutationContext) {
       requested_at: nowIso,
     })
     .eq("id", expenseId)
+    // 읽은 뒤 다른 요청이 상태를 바꿨으면 0행(동시 승인·취소 경합 방지).
+    .eq("status", expense.status)
     .select(EXPENSE_MUTATION_SELECT)
     .maybeSingle<ExpenseRow>();
 
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("Expense update failed");
+  if (!data) throw new Error(STATUS_CHANGED_MESSAGE);
 
   await logStatusTransition({
     expenseId,
@@ -149,11 +153,13 @@ export async function approveExpense(
       rejected_reason: null,
     })
     .eq("id", expenseId)
+    // 읽은 뒤 다른 요청이 상태를 바꿨으면 0행(동시 승인·취소 경합 방지).
+    .eq("status", expense.status)
     .select(EXPENSE_MUTATION_SELECT)
     .maybeSingle<ExpenseRow>();
 
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("Expense update failed");
+  if (!data) throw new Error(STATUS_CHANGED_MESSAGE);
 
   await logStatusTransition({
     expenseId,
@@ -194,11 +200,13 @@ export async function rejectExpense(
       rejected_reason: trimmed,
     })
     .eq("id", expenseId)
+    // 읽은 뒤 다른 요청이 상태를 바꿨으면 0행(동시 승인·취소 경합 방지).
+    .eq("status", expense.status)
     .select(EXPENSE_MUTATION_SELECT)
     .maybeSingle<ExpenseRow>();
 
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("Expense update failed");
+  if (!data) throw new Error(STATUS_CHANGED_MESSAGE);
 
   await logStatusTransition({
     expenseId,
@@ -248,11 +256,13 @@ export async function markExpensePaid(
           : 0,
     })
     .eq("id", expenseId)
+    // 읽은 뒤 다른 요청이 상태를 바꿨으면 0행(동시 승인·취소 경합 방지).
+    .eq("status", expense.status)
     .select(EXPENSE_MUTATION_SELECT)
     .maybeSingle<ExpenseRow>();
 
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("Expense update failed");
+  if (!data) throw new Error(STATUS_CHANGED_MESSAGE);
 
   await logStatusTransition({
     expenseId,
@@ -274,9 +284,14 @@ export async function markExpensePaid(
 export async function cancelExpense(
   expenseId: string,
   reason: string | null,
-  ctx: MutationContext
+  ctx: MutationContext,
+  // 관리자·재무가 아닌 직원은 작성중·요청·반려 건만 취소한다. 읽은 상태와 같을 때만 바꾸므로 그 사이 승인돼도 취소되지 않는다.
+  allowedFrom?: readonly ExpenseStatus[]
 ) {
   const expense = await getExpense(expenseId);
+  if (allowedFrom && !allowedFrom.includes(expense.status)) {
+    throw new Error("승인·지급된 매입의 취소는 관리자 또는 재무 담당만 할 수 있습니다.");
+  }
   ensureTransition(expense.status, "cancelled");
 
   const trimmed = reason?.trim() || null;
@@ -289,11 +304,13 @@ export async function cancelExpense(
       cancelled_reason: trimmed,
     })
     .eq("id", expenseId)
+    // 읽은 뒤 다른 요청이 상태를 바꿨으면 0행(동시 승인·취소 경합 방지).
+    .eq("status", expense.status)
     .select(EXPENSE_MUTATION_SELECT)
     .maybeSingle<ExpenseRow>();
 
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("Expense update failed");
+  if (!data) throw new Error(STATUS_CHANGED_MESSAGE);
 
   await logStatusTransition({
     expenseId,

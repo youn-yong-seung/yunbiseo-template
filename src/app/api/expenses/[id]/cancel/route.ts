@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { appUrl } from "@/lib/app-url";
 import { publicErrorMessage } from "@/lib/safe-error";
 
-import { createRouteAuthErrorResponse, forbiddenResponse, requireRouteUser } from "@/lib/route-auth";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { cancelExpense, resolveActorEmployee } from "@/lib/expense-mutations";
+import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
+import { STATUS_CHANGED_MESSAGE, cancelExpense, resolveActorEmployee } from "@/lib/expense-mutations";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -19,13 +18,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
   if (!user || !employee) return createRouteAuthErrorResponse(authUnavailable);
 
   // 승인·지급 예정·지급완료된 건의 취소는 관리자·재무만 한다(직원이 승인 건을 취소한 뒤 금액을 고쳐 다시 올리던 문제).
-  if (!employee.isAdmin && !employee.is_finance) {
-    const { data: current } = await createAdminClient().from("expenses").select("status").eq("id", id).maybeSingle();
-    if (current && ["approved", "scheduled", "paid"].includes(current.status as string)) {
-      return forbiddenResponse("승인·지급된 매입의 취소는 관리자 또는 재무 담당만 할 수 있습니다.");
-    }
-  }
-
+  // 확인과 취소를 한 번의 조건부 update 로 한다(cancelExpense 의 allowedFrom + 상태 조건).
+  const privileged = employee.isAdmin || employee.is_finance;
   const body = await request.json().catch(() => null);
   const reason = typeof body?.reason === "string" ? body.reason : null;
 
@@ -35,10 +29,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       actorId,
       actorName,
       expenseUrl: resolveExpenseUrl(request, id),
-    });
+    }, privileged ? undefined : (["draft", "requested", "rejected"] as const));
     return NextResponse.json({ success: true, data });
   } catch (error) {
     const message = publicErrorMessage(error, "지출 취소에 실패했습니다.");
-    return NextResponse.json({ error: message }, { status: 400 });
+    const status = message.startsWith("승인·지급된 매입의 취소는") ? 403 : message === STATUS_CHANGED_MESSAGE ? 409 : 400;
+    return NextResponse.json({ error: message }, { status });
   }
 }

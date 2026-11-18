@@ -1,12 +1,10 @@
 import { createHash, randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
-import { hashUserCode, normalizeUserCode, sameHash } from "@/lib/cli-auth";
+import { hashUserCode, normalizeUserCode } from "@/lib/cli-auth";
 import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { UUID_RE } from "@/lib/yb-api/refs";
-
-const MAX_CODE_ATTEMPTS = 5;
 
 /**
  * yb login 승인: 로그인한 직원이 yb 가 등록한 요청(request_id)을 터미널의 확인 코드로 승인한다.
@@ -27,28 +25,23 @@ export async function POST(request: NextRequest) {
   }
 
   const admin = createAdminClient();
-  const { data: row } = await admin
-    .from("cli_auth_requests")
-    .select("id, user_code_hash, employee_id, consumed_at, expires_at, failed_attempts, code_challenge")
-    .eq("id", requestId)
-    .maybeSingle();
-
-  if (
-    !row ||
-    !row.user_code_hash ||
-    !row.code_challenge ||
-    row.employee_id ||
-    row.consumed_at ||
-    new Date(row.expires_at).getTime() < Date.now() ||
-    row.failed_attempts >= MAX_CODE_ATTEMPTS
-  ) {
-    return NextResponse.json({ error: "만료됐거나 이미 처리된 요청입니다. 터미널에서 yb login 을 다시 실행해 주세요." }, { status: 410 });
+  // 대조와 실패 횟수 증가를 DB 한 번(행 잠금)으로 한다. 동시에 여러 번 보내도 5번까지만 대조되고,
+  // 5번째로 틀리면 그 요청의 확인 코드는 지워진다(cli_auth_check_user_code).
+  const { data: verdict, error: checkError } = await admin.rpc("cli_auth_check_user_code", {
+    p_request_id: requestId,
+    p_code_hash: hashUserCode(userCode),
+  });
+  if (checkError) {
+    console.error("[cli-auth/start]", checkError.message);
+    return NextResponse.json({ error: "승인하지 못했습니다. 잠시 뒤 다시 시도해 주세요." }, { status: 500 });
   }
-
-  if (!sameHash(hashUserCode(userCode), String(row.user_code_hash))) {
-    await admin.from("cli_auth_requests").update({ failed_attempts: row.failed_attempts + 1 }).eq("id", row.id);
+  if (verdict === "mismatch") {
     return NextResponse.json({ error: "확인 코드가 터미널에 보이는 코드와 다릅니다." }, { status: 403 });
   }
+  if (verdict !== "ok") {
+    return NextResponse.json({ error: "만료됐거나 이미 처리된 요청입니다. 터미널에서 yb login 을 다시 실행해 주세요." }, { status: 410 });
+  }
+  const row = { id: requestId };
 
   const code = randomBytes(24).toString("hex");
   const { data: approved, error } = await admin

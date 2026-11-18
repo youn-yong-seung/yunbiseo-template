@@ -22,9 +22,11 @@ export async function POST(request: NextRequest) {
   const hostname = (typeof body?.hostname === "string" ? body.hostname : "").replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 40) || "unknown";
 
   const admin = createAdminClient();
+  // 속도 제한은 접속 IP 별로 센다(키를 하나로 두면 익명 10번으로 모든 사람의 yb login 이 막힌다).
+  const ip = clientIp(request.headers) ?? "unknown";
   const { data: rateOk } = await admin.rpc("check_login_rate", {
-    p_ip: clientIp(request.headers) ?? "unknown",
-    p_login_key: "cli-device",
+    p_ip: ip,
+    p_login_key: `cli-device:${ip}`,
   });
   if (rateOk === false) {
     return NextResponse.json({ error: "요청이 너무 많습니다. 5분 뒤 다시 시도해 주세요." }, { status: 429 });

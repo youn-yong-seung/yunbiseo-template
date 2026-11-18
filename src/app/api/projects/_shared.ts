@@ -1,5 +1,6 @@
 import { PROJECT_STATUS_OPTIONS } from "@/lib/project-status";
-import { BadRequest, NotFound, normalizeText, parseDate, type Admin } from "@/lib/yb-api/refs";
+import { publicErrorMessage } from "@/lib/safe-error";
+import { BadRequest, NotFound, dbError, normalizeText, parseDate, type Admin } from "@/lib/yb-api/refs";
 
 /** yb 가 읽는 모양: 유형 이름·고객 이름을 함께 싣는다. */
 export const PROJECT_SELECT = "*, project_types(id, name), customers(id, name)";
@@ -86,7 +87,8 @@ export async function setProjectStatus(
     p_actor_employee_id: actorEmployeeId,
     p_source: "api",
   });
-  if (error) throw new BadRequest(error.message);
+  // 단계 함수가 일부러 낸 한국어 안내만 보여 주고, DB 원문은 서버 로그로.
+  if (error) throw new BadRequest(publicErrorMessage(error, "단계를 바꾸지 못했습니다."));
 }
 
 /**
@@ -102,11 +104,11 @@ export async function syncProjectAssignees(supabase: Admin, projectId: string, m
     ids.push(data.id as string);
   }
   const { error: delError } = await supabase.from("project_assignees").delete().eq("project_id", projectId);
-  if (delError) throw new BadRequest(delError.message);
+  if (delError) throw dbError(delError);
   if (ids.length > 0) {
     const { error } = await supabase
       .from("project_assignees")
       .insert([...new Set(ids)].map((employee_id) => ({ project_id: projectId, employee_id })));
-    if (error) throw new BadRequest(error.message);
+    if (error) throw dbError(error);
   }
 }
