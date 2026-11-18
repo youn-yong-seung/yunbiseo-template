@@ -5,6 +5,8 @@ import { createClient } from "@supabase/supabase-js";
 import { logInfo, logError } from "@/lib/logger";
 import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
 
+const PASSWORD_CHANGE_KEY = "password-change";
+
 // PATCH: 본인 비밀번호 변경
 export async function PATCH(request: NextRequest) {
   try {
@@ -37,7 +39,11 @@ export async function PATCH(request: NextRequest) {
 
     // 현재 비밀번호 확인도 로그인과 같은 시도 제한을 받는다(세션만 훔친 사람이 비밀번호를 맞혀 보지 못하게).
     const adminSupabase = createAdminClient();
-    const { data: reserved } = await adminSupabase.rpc("reserve_login_attempt", { p_employee_id: employee.id });
+    // 세션 주인 본인만 이 길을 쓰므로 "비밀번호 변경" 한 칸으로 센다(5번 틀리면 15분).
+    const { data: reserved } = await adminSupabase.rpc("reserve_login_attempt", {
+      p_employee_id: employee.id,
+      p_client_key: PASSWORD_CHANGE_KEY,
+    });
     if (reserved !== true) {
       return NextResponse.json(
         { error: "비밀번호를 여러 번 틀려 15분 동안 변경할 수 없습니다." },
@@ -58,7 +64,7 @@ export async function PATCH(request: NextRequest) {
     });
 
     if (signInError) {
-      await adminSupabase.rpc("record_login_failure", { p_employee_id: employee.id });
+      await adminSupabase.rpc("record_login_failure", { p_employee_id: employee.id, p_client_key: PASSWORD_CHANGE_KEY });
       return NextResponse.json(
         { error: "현재 비밀번호가 일치하지 않습니다" },
         { status: 400 }
@@ -78,6 +84,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: publicErrorMessage(error) }, { status: 400 });
     }
 
+    await adminSupabase.rpc("clear_login_failures", { p_employee_id: employee.id, p_client_key: PASSWORD_CHANGE_KEY });
     await adminSupabase
       .from("employees")
       .update({
@@ -93,7 +100,7 @@ export async function PATCH(request: NextRequest) {
       details: { auth_uid: user.id },
     });
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: "서버 오류가 발생했습니다" },
       { status: 500 }

@@ -7,10 +7,12 @@ import { sendExpenseSlackNotification } from "@/lib/slack";
 import { logInfo } from "@/lib/logger";
 import type { ExpenseStatus, VendorTaxCategory } from "@/lib/types";
 
+export const NOT_OWNER_MESSAGE = "다른 직원이 결재 요청한 매입은 요청한 사람이나 관리자·재무 담당만 처리할 수 있습니다.";
+
 export const STATUS_CHANGED_MESSAGE = "다른 요청이 먼저 이 매입의 상태를 바꿨습니다. 새로 고침한 뒤 다시 시도하세요.";
 
 const EXPENSE_MUTATION_SELECT =
-  "id, title, status, total_amount, withholding_amount, net_payment_amount, tax_category, vendor_id, purchase_date, payment_date, slack_thread_ts";
+  "id, title, status, total_amount, withholding_amount, net_payment_amount, tax_category, vendor_id, purchase_date, payment_date, slack_thread_ts, requested_by";
 
 type ExpenseRow = {
   id: string;
@@ -24,12 +26,32 @@ type ExpenseRow = {
   purchase_date: string | null;
   payment_date: string | null;
   slack_thread_ts: string | null;
+  requested_by: string | null;
 };
 
 export interface MutationContext {
   actorId: string | null;
   actorName: string | null;
   expenseUrl?: string | null;
+  /**
+   * 관리자·재무가 아닌 직원이 부를 때 그 직원 id. 주면 "요청자가 없거나 본인인 건"만 처리한다
+   * (다른 직원이 결재 요청한 매입을 대신 다시 올리거나 취소하지 못하게).
+   */
+  ownerEmployeeId?: string | null;
+}
+
+function assertOwner(expense: ExpenseRow, ctx: MutationContext) {
+  if (ctx.ownerEmployeeId === undefined) return;
+  if (expense.requested_by && expense.requested_by !== ctx.ownerEmployeeId) {
+    throw new Error(NOT_OWNER_MESSAGE);
+  }
+}
+
+function ownerFilter(ctx: MutationContext) {
+  if (ctx.ownerEmployeeId === undefined) return null;
+  return ctx.ownerEmployeeId
+    ? `requested_by.is.null,requested_by.eq.${ctx.ownerEmployeeId}`
+    : "requested_by.is.null";
 }
 
 async function getExpense(expenseId: string) {
@@ -99,10 +121,11 @@ async function notifySlack(params: {
 export async function submitExpense(expenseId: string, ctx: MutationContext) {
   const expense = await getExpense(expenseId);
   ensureTransition(expense.status, "requested");
+  assertOwner(expense, ctx);
 
   const admin = createAdminClient();
   const nowIso = new Date().toISOString();
-  const { data, error } = await admin
+  let query = admin
     .from("expenses")
     .update({
       status: "requested" as ExpenseStatus,
@@ -111,7 +134,10 @@ export async function submitExpense(expenseId: string, ctx: MutationContext) {
     })
     .eq("id", expenseId)
     // 읽은 뒤 다른 요청이 상태를 바꿨으면 0행(동시 승인·취소 경합 방지).
-    .eq("status", expense.status)
+    .eq("status", expense.status);
+  const submitOwner = ownerFilter(ctx);
+  if (submitOwner) query = query.or(submitOwner);
+  const { data, error } = await query
     .select(EXPENSE_MUTATION_SELECT)
     .maybeSingle<ExpenseRow>();
 
@@ -293,10 +319,11 @@ export async function cancelExpense(
     throw new Error("승인·지급된 매입의 취소는 관리자 또는 재무 담당만 할 수 있습니다.");
   }
   ensureTransition(expense.status, "cancelled");
+  assertOwner(expense, ctx);
 
   const trimmed = reason?.trim() || null;
   const admin = createAdminClient();
-  const { data, error } = await admin
+  let query = admin
     .from("expenses")
     .update({
       status: "cancelled" as ExpenseStatus,
@@ -305,7 +332,10 @@ export async function cancelExpense(
     })
     .eq("id", expenseId)
     // 읽은 뒤 다른 요청이 상태를 바꿨으면 0행(동시 승인·취소 경합 방지).
-    .eq("status", expense.status)
+    .eq("status", expense.status);
+  const cancelOwner = ownerFilter(ctx);
+  if (cancelOwner) query = query.or(cancelOwner);
+  const { data, error } = await query
     .select(EXPENSE_MUTATION_SELECT)
     .maybeSingle<ExpenseRow>();
 

@@ -8,7 +8,7 @@ import { UUID_RE } from "@/lib/yb-api/refs";
 
 /**
  * yb login 0단계(디바이스 플로우): yb 가 로그인 요청을 등록하고 확인 코드를 받는다.
- * POST { code_challenge, hostname } → { request_id, user_code, expires_in }   (로그인 불필요, IP 별 5분 10번)
+ * POST { code_challenge, hostname } → { request_id, user_code, expires_in }   (로그인 불필요, IP 별 5분 10번·전체 100번)
  *  - 확인 코드는 응답으로만 주고 DB 에는 해시만 저장한다. yb 가 터미널에 보여 주고, 사람이 승인 화면에 직접 입력한다.
  *
  * GET ?request=<id> → 승인 화면에 보여 줄 정보(요청한 컴퓨터 이름·요청 시각·발급될 키 이름·내 이름). 로그인 필요.
@@ -22,11 +22,12 @@ export async function POST(request: NextRequest) {
   const hostname = (typeof body?.hostname === "string" ? body.hostname : "").replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 40) || "unknown";
 
   const admin = createAdminClient();
-  // 속도 제한은 접속 IP 별로 센다(키를 하나로 두면 익명 10번으로 모든 사람의 yb login 이 막힌다).
-  const ip = clientIp(request.headers) ?? "unknown";
+  // 속도 제한은 접속 IP 별로 센다(IP+이 기능 5분 10번). IP 를 모르면(프록시 설정 전) null 로 보내
+  // 'IP 모름' 칸을 더 느슨하게(5분 30번) 센다. 어느 경우든 이 기능 전체는 5분 100번까지.
+  const ip = clientIp(request.headers);
   const { data: rateOk } = await admin.rpc("check_login_rate", {
     p_ip: ip,
-    p_login_key: `cli-device:${ip}`,
+    p_login_key: "cli-device",
   });
   if (rateOk === false) {
     return NextResponse.json({ error: "요청이 너무 많습니다. 5분 뒤 다시 시도해 주세요." }, { status: 429 });

@@ -54,6 +54,11 @@ export function toRouteEmployee(row: EmployeeRow): RouteEmployee {
   };
 }
 
+/** 돈이 오가는 처리(세금계산서 발행·매입 승인·거래처 계좌 변경 등)를 할 수 있는 직원: 관리자 또는 재무 담당. */
+export function canManageFinance(employee: Pick<RouteEmployee, "isAdmin" | "is_finance">): boolean {
+  return employee.isAdmin || employee.is_finance;
+}
+
 /** auth 사용자 id 로 활성 직원을 찾는다. 없거나 비활성이면 null. */
 export async function findActiveEmployeeByAuthUid(authUid: string): Promise<RouteEmployee | null> {
   const admin = createAdminClient();

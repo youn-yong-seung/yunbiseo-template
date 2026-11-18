@@ -322,6 +322,8 @@ async function createMeeting(
   }
 }
 
+const MAX_MEETINGS_PER_REQUEST = 20;
+
 export async function POST(request: NextRequest) {
   try {
     const isValid = await validateApiKey(request);
@@ -339,6 +341,13 @@ export async function POST(request: NextRequest) {
     const items = Array.isArray(body) ? body : [body];
     if (items.length === 0) {
       return NextResponse.json({ error: "Empty payload" }, { status: 400 });
+    }
+    // 한 번에 너무 많이 보내 서버를 오래 붙잡지 못하게(회의록마다 DB·AI 처리가 있다).
+    if (items.length > MAX_MEETINGS_PER_REQUEST) {
+      return NextResponse.json(
+        { error: `한 번에 ${MAX_MEETINGS_PER_REQUEST}건까지 보낼 수 있습니다.` },
+        { status: 400 }
+      );
     }
 
     const supabase = createAdminClient();

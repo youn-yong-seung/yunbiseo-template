@@ -255,6 +255,7 @@ export default function SettingsPage() {
   // 생성 다이얼로그
   const [createOpen, setCreateOpen] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
+  const [newKeyDays, setNewKeyDays] = useState("90");
   const [creating, setCreating] = useState(false);
 
   // 생성 완료 다이얼로그
@@ -813,10 +814,13 @@ export default function SettingsPage() {
       const res = await fetch("/api/api-keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newKeyName.trim() }),
+        body: JSON.stringify({ name: newKeyName.trim(), expires_in_days: Number(newKeyDays) }),
       });
 
-      if (res.ok) {
+      if (!res.ok) {
+        const json = await res.json().catch(() => null);
+        toast.error(json?.error ?? "API Key 생성에 실패했습니다.");
+      } else {
         const json = await res.json();
         setGeneratedKey(json.data.raw_key);
         setCreateOpen(false);
@@ -1327,6 +1331,19 @@ export default function SettingsPage() {
                 if (e.key === "Enter") handleCreate();
               }}
             />
+            <Label htmlFor="key-days">사용 기간</Label>
+            <select
+              id="key-days"
+              value={newKeyDays}
+              onChange={(e) => setNewKeyDays(e.target.value)}
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="30">30일</option>
+              <option value="90">90일 (권장)</option>
+              <option value="180">180일</option>
+              <option value="365">1년</option>
+            </select>
+            <p className="text-xs text-muted-foreground">기간이 지나면 키가 멈춥니다. 그 전에 새 키를 만들어 바꿔 끼우세요.</p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>

@@ -13,10 +13,11 @@ import {
 import { logError, logInfo } from "@/lib/logger";
 import { DEFAULT_SUPPLIER } from "@/lib/quotation-constants";
 import {
+  REVENUE_TAX_INVOICE_STALE_MINUTES,
   getRevenueTaxInvoiceState,
   isRevenueTaxInvoiceIssuingStale,
 } from "@/lib/revenue-tax-invoice";
-import { requireRouteUserOrApiKey } from "@/lib/route-auth";
+import { canManageFinance, forbiddenResponse, requireRouteUserOrApiKey } from "@/lib/route-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSystemSettingWithEnvFallback } from "@/lib/system-settings";
 import {
@@ -133,7 +134,12 @@ function getStateBlockedReasons(taxInvoiceState: string) {
  * - 품목 수·수량·단가·공급가액·세액: 매출에 저장된 금액에서만 나온다(본문으로 금액을 바꿔 발행하지 못하게).
  * - 공급자(우리 회사) 사업자번호·상호·대표자: 서버에 설정돼 있으면(quotation-constants) 그 값만 쓴다.
  *   설정이 비어 있는 템플릿 기본 상태에서는 화면에서 넣은 값을 쓴다.
- * 날짜·용도·설명·품목명, 공급받는자 정보·담당자 연락처처럼 비어 있으면 채워야 하는 칸은 화면 값을 받는다.
+ * - 공급받는자 사업자번호·상호: 연결된 고객 레코드 값만 쓴다(비어 있으면 prepareIssuePreview 가 발행을 막는다).
+ *   대표자는 고객 레코드에 있으면 그 값, 없을 때만 화면 값을 받는다.
+ * - 공급받는자 담당자 이메일: 고객 레코드(대표 연락처·담당자)에 있으면 그 값만 쓴다. 없으면 화면 값을 받는다.
+ *   이메일은 세금계산서를 받을 주소일 뿐 국세청에 신고되는 거래 상대(사업자번호·상호)를 바꾸지 않고,
+ *   고객마다 이메일을 미리 넣어 두지 않은 경우가 많아 막으면 정상 발행이 멈춘다. 발행 권한(관리자·재무)이 있는 사람만 넣을 수 있다.
+ * 날짜·용도·설명·품목명, 담당자 이름·전화처럼 비어 있으면 채워야 하는 칸은 화면 값을 받는다.
  */
 function lockServerTaxInvoiceFields(
   merged: BoltaTaxInvoiceIssueRequest,
@@ -146,6 +152,18 @@ function lockServerTaxInvoiceFields(
       identificationNumber: server.supplier.identificationNumber || merged.supplier.identificationNumber,
       organizationName: server.supplier.organizationName || merged.supplier.organizationName,
       representativeName: server.supplier.representativeName || merged.supplier.representativeName,
+    },
+    supplied: {
+      ...merged.supplied,
+      identificationNumber: server.supplied.identificationNumber,
+      organizationName: server.supplied.organizationName,
+      representativeName: server.supplied.representativeName || merged.supplied.representativeName,
+      managers: (merged.supplied.managers?.length ? merged.supplied.managers : server.supplied.managers).map(
+        (manager, index) => {
+          const serverEmail = server.supplied.managers?.[index]?.email || server.supplied.managers?.[0]?.email;
+          return { ...manager, email: serverEmail || manager.email };
+        }
+      ),
     },
     items: server.items.map((serverItem, index) => {
       const edited = merged.items[index] ?? serverItem;
@@ -579,6 +597,14 @@ async function prepareIssuePreview(
 
   if (!project?.customer_id || !customer) {
     structuralBlockedReasons.push("연결된 고객이 없습니다.");
+  } else {
+    // 공급받는자 사업자번호·상호는 고객 레코드 값만 쓴다(화면에서 바꿔 다른 사업자로 발행하지 못하게).
+    if (normalizeBusinessNumber(customer.business_number).length !== 10) {
+      structuralBlockedReasons.push("고객의 사업자등록번호(10자리)가 비어 있거나 올바르지 않습니다. 고객 정보에서 먼저 입력하세요.");
+    }
+    if (!asTrimmed(customer.name)) {
+      structuralBlockedReasons.push("고객 상호가 비어 있습니다. 고객 정보에서 먼저 입력하세요.");
+    }
   }
 
   if (
@@ -698,6 +724,11 @@ export async function PATCH(request: Request, context: RouteContext) {
       });
     }
 
+    // 강제 취소는 발행과 같은 권한(관리자·재무). API 키는 키 주인 직원의 권한으로 본다.
+    if (!canManageFinance(auth.actor.employee)) {
+      return forbiddenResponse("세금계산서 발행중 강제 취소는 관리자 또는 재무 담당만 할 수 있습니다.");
+    }
+
     if (getRevenueTaxInvoiceState(revenue) !== "issuing") {
       return NextResponse.json(
         { error: "발행중 상태인 세금계산서만 강제 취소할 수 있습니다." },
@@ -716,11 +747,23 @@ export async function PATCH(request: Request, context: RouteContext) {
             )
           )
         : null;
+    // 방금 볼타로 보낸 건을 바로 풀면 같은 매출을 두 번 발행할 수 있다. 오래 걸린(멈춘) 건만 풀어 준다.
+    // 요청 시각이 없는 옛 데이터는 경과 시간을 알 수 없어 풀어 준다(그대로 두면 영원히 발행중으로 남는다).
+    if (ageMinutes !== null && ageMinutes < REVENUE_TAX_INVOICE_STALE_MINUTES) {
+      return NextResponse.json(
+        {
+          error: `발행 요청 후 ${REVENUE_TAX_INVOICE_STALE_MINUTES}분이 지나야 강제 취소할 수 있습니다. 먼저 '상태 재확인'을 눌러 보세요.`,
+        },
+        { status: 409 }
+      );
+    }
+
     const errorMessage =
       "사용자가 발행중 상태를 강제 취소했습니다. 볼타 관리자 화면에서 실제 발행 여부를 반드시 확인하세요. " +
       "웹훅이 뒤늦게 도착해 실제로는 발행이 완료될 수 있으며, 이 경우 상태 정합성이 맞지 않을 수 있습니다.";
 
-    const { error: resetError } = await admin
+    // 읽은 뒤 웹훅이 발행완료로 바꿨거나 다른 요청이 새로 발행을 시작했으면 0행(409).
+    let resetQuery = admin
       .from("revenues")
       .update({
         tax_invoice_issue_status: "failed",
@@ -732,10 +775,23 @@ export async function PATCH(request: Request, context: RouteContext) {
         tax_invoice_error_code: "FORCE_CANCELLED",
         tax_invoice_error_message: errorMessage,
       })
-      .eq("id", revenue.id);
+      .eq("id", revenue.id)
+      .eq("tax_invoice_issue_status", "issuing")
+      .not("is_tax_invoice_issued", "is", true);
+    const readReferenceId = revenue.tax_invoice_client_reference_id;
+    resetQuery = readReferenceId
+      ? resetQuery.eq("tax_invoice_client_reference_id", readReferenceId)
+      : resetQuery.is("tax_invoice_client_reference_id", null);
+    const { data: resetRows, error: resetError } = await resetQuery.select("id");
 
     if (resetError) {
       throw new Error(resetError.message);
+    }
+    if (!resetRows || resetRows.length === 0) {
+      return NextResponse.json(
+        { error: "그 사이 세금계산서 상태가 바뀌었습니다. 새로 고침한 뒤 다시 확인하세요.", data: await selectUpdatedRevenue(revenue.id) },
+        { status: 409 }
+      );
     }
 
     logError("FORCE_CANCEL_REVENUE_TAX_INVOICE", `세금계산서 발행 강제 취소: ${revenue.title}`, {
@@ -777,6 +833,11 @@ export async function POST(request: Request, context: RouteContext) {
   const auth = await requireRouteUserOrApiKey(request);
   if (!auth.ok) return auth.response;
   const actorId = auth.actorId ?? undefined;
+
+  // 세금계산서 발행은 관리자·재무만. API 키는 키 주인 직원의 권한으로 본다.
+  if (!canManageFinance(auth.actor.employee)) {
+    return forbiddenResponse("세금계산서 발행은 관리자 또는 재무 담당만 할 수 있습니다.");
+  }
 
   const { id } = await context.params;
   const admin = createAdminClient();
@@ -897,7 +958,10 @@ export async function POST(request: Request, context: RouteContext) {
           tax_invoice_error_code: null,
           tax_invoice_error_message: null,
         })
-        .eq("id", revenue.id);
+        .eq("id", revenue.id)
+        // 이 요청이 선점한 "발행중"일 때만. 그 사이 웹훅이 발행완료로 바꿨거나 강제 취소됐으면 덮어쓰지 않는다.
+        .eq("tax_invoice_issue_status", "issuing")
+        .eq("tax_invoice_client_reference_id", clientReferenceId);
 
       if (updateError) {
         throw new Error(updateError.message);
@@ -935,7 +999,9 @@ export async function POST(request: Request, context: RouteContext) {
               tax_invoice_error_code: null,
               tax_invoice_error_message: null,
             })
-            .eq("id", revenue.id);
+            .eq("id", revenue.id)
+            .eq("tax_invoice_issue_status", "issuing")
+            .eq("tax_invoice_client_reference_id", clientReferenceId);
 
           if (recoveredUpdateError) {
             throw new Error(recoveredUpdateError.message);

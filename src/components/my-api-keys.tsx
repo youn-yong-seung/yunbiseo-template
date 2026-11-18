@@ -34,6 +34,7 @@ export function MyApiKeys() {
   const [keys, setKeys] = useState<MyApiKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
+  const [days, setDays] = useState("90");
   const [creating, setCreating] = useState(false);
   const [newKey, setNewKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -61,7 +62,7 @@ export function MyApiKeys() {
       const res = await fetch("/api/api-keys", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: keyName }),
+        body: JSON.stringify({ name: keyName, expires_in_days: Number(days) }),
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.data?.raw_key) {
@@ -112,6 +113,17 @@ export function MyApiKeys() {
             placeholder="키 이름 (예: 내 노트북 Claude Code)"
             maxLength={100}
           />
+          <select
+            aria-label="사용 기간"
+            value={days}
+            onChange={(event) => setDays(event.target.value)}
+            className="h-9 shrink-0 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="30">30일</option>
+            <option value="90">90일</option>
+            <option value="180">180일</option>
+            <option value="365">1년</option>
+          </select>
           <Button type="submit" disabled={creating} className="shrink-0">
             <KeyRound className="mr-1 h-4 w-4" />
             {creating ? "만드는 중..." : "새 API 키 만들기"}

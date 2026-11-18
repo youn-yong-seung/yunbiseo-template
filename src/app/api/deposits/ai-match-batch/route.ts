@@ -41,7 +41,7 @@ interface ExactMatchResult {
   revenue_title: string;
   revenue_amount: number;
   project_name: string | null;
-  match_type: "exact_name_single" | "exact_name_amount";
+  match_type: "exact_name_amount";
 }
 
 interface AiMatchResult {
@@ -179,38 +179,28 @@ export async function POST() {
       }
     }
 
+    // 자동 연결(입금완료 처리까지)은 입금자명과 금액이 모두 정확히 맞고, 그런 미수 매출이 하나뿐일 때만 한다.
+    // 이름만 맞는 건은 금액이 달라도(수수료 차감·부분 입금·다른 건) 사람이 확인하도록 추천으로만 보여 준다.
     const autoMatched: ExactMatchResult[] = [];
+    const nameOnlySuggestions: AiMatchResult[] = [];
     const aiQueue: DepositRow[] = [];
     const aiCandidateMap = new Map<string, RevenueCandidate[]>();
+    // 한 번에 두 입금이 같은 매출로 자동 연결되지 않게 한다.
+    const claimedRevenueIds = new Set<string>();
 
     for (const deposit of pendingDeposits) {
       const key = normalizeBusinessName(deposit.depositor_name);
       const matchedRevenueIds = key ? keyToRevenueIds.get(key) ?? [] : [];
 
-      if (matchedRevenueIds.length === 1) {
-        const rev = revenueById.get(matchedRevenueIds[0])!;
-        autoMatched.push({
-          deposit_id: deposit.id,
-          depositor_name: deposit.depositor_name,
-          amount: deposit.amount,
-          deposit_date: deposit.deposit_date,
-          revenue_id: rev.id,
-          revenue_title: rev.title,
-          revenue_amount: rev.total_amount,
-          project_name: rev.projects?.name ?? null,
-          match_type: "exact_name_single",
-        });
-        continue;
-      }
-
-      if (matchedRevenueIds.length > 1) {
-        // 금액이 정확히 일치하는 건이 유일하면 자동 연결
-        const amountMatches = matchedRevenueIds
-          .map((id) => revenueById.get(id)!)
-          .filter((rev) => rev.total_amount === deposit.amount);
+      if (matchedRevenueIds.length > 0) {
+        const nameMatches = matchedRevenueIds.map((id) => revenueById.get(id)!);
+        const amountMatches = nameMatches.filter(
+          (rev) => rev.total_amount === deposit.amount && !claimedRevenueIds.has(rev.id)
+        );
 
         if (amountMatches.length === 1) {
           const rev = amountMatches[0];
+          claimedRevenueIds.add(rev.id);
           autoMatched.push({
             deposit_id: deposit.id,
             depositor_name: deposit.depositor_name,
@@ -225,14 +215,34 @@ export async function POST() {
           continue;
         }
 
+        if (nameMatches.length === 1) {
+          // 이름은 하나로 맞지만 금액이 다르다 → AI 를 부르지 않고 확인용 추천으로만.
+          const rev = nameMatches[0];
+          nameOnlySuggestions.push({
+            deposit_id: deposit.id,
+            depositor_name: deposit.depositor_name,
+            amount: deposit.amount,
+            deposit_date: deposit.deposit_date,
+            suggestions: [
+              {
+                revenue_id: rev.id,
+                revenue_title: rev.title,
+                revenue_amount: rev.total_amount,
+                project_name: rev.projects?.name ?? null,
+                confidence: rev.total_amount === deposit.amount ? "high" : "medium",
+                reason:
+                  rev.total_amount === deposit.amount
+                    ? "입금자명·금액이 같지만 같은 매출에 연결될 다른 입금이 있어 확인이 필요합니다."
+                    : `입금자명은 같지만 금액이 다릅니다(입금 ${deposit.amount.toLocaleString("ko-KR")}원 / 매출 ${rev.total_amount.toLocaleString("ko-KR")}원).`,
+              },
+            ],
+          });
+          continue;
+        }
+
         // 이름은 일치하지만 금액이 모호 → 해당 후보들만 AI 에게 전달
         aiQueue.push(deposit);
-        aiCandidateMap.set(
-          deposit.id,
-          matchedRevenueIds
-            .map((id) => revenueById.get(id)!)
-            .map(toRevenueCandidate)
-        );
+        aiCandidateMap.set(deposit.id, nameMatches.map(toRevenueCandidate));
         continue;
       }
 
@@ -254,24 +264,56 @@ export async function POST() {
       aiCandidateMap.set(deposit.id, candidates);
     }
 
-    // 자동 연결 일괄 처리 (deposits 업데이트 + 해당 revenues 입금완료 처리)
+    // 자동 연결 일괄 처리. 동시에 다른 요청(다른 사람의 일괄 매칭·수동 연결)이 같은 입금·매출을 처리해도
+    // 한쪽만 반영되도록 조건부로 바꾼다.
+    //  1) 매출을 "아직 미입금일 때만" 입금완료로 선점한다(0행이면 이미 처리됨 → 건너뜀).
+    //  2) 입금을 "아직 연결 안 됐을 때만" 연결한다(입금 트리거가 매출 입금완료를 다시 맞춘다).
+    //  3) 2)가 0행이면(다른 요청이 먼저 연결) 그 입금이 이 매출에 연결된 게 아니면 1)을 되돌린다.
+    const confirmedAuto: ExactMatchResult[] = [];
     if (autoMatched.length > 0) {
       await Promise.all(
         autoMatched.map(async (match) => {
-          const { error: updateDepositError } = await supabase
+          const { data: paidRevenues, error: updateRevenueError } = await supabase
+            .from("revenues")
+            .update({ is_paid: true, paid_date: match.deposit_date })
+            .eq("id", match.revenue_id)
+            .eq("is_paid", false)
+            .select("id");
+
+          if (updateRevenueError) {
+            console.error("자동 매칭 매출 업데이트 실패:", updateRevenueError.message);
+            return;
+          }
+          if (!paidRevenues || paidRevenues.length === 0) return; // 그 사이 다른 곳에서 입금완료 처리됨
+
+          const { data: linkedDeposits, error: updateDepositError } = await supabase
             .from("deposits")
             .update({ revenue_id: match.revenue_id })
-            .eq("id", match.deposit_id);
+            .eq("id", match.deposit_id)
+            .is("revenue_id", null)
+            .select("id");
 
-          if (updateDepositError) {
-            console.error("자동 매칭 입금 업데이트 실패:", updateDepositError.message);
+          if (!updateDepositError && linkedDeposits && linkedDeposits.length > 0) {
+            confirmedAuto.push(match);
             return;
           }
 
-          await supabase
-            .from("revenues")
-            .update({ is_paid: true, paid_date: match.deposit_date })
-            .eq("id", match.revenue_id);
+          if (updateDepositError) {
+            console.error("자동 매칭 입금 업데이트 실패:", updateDepositError.message);
+          }
+          const { data: current } = await supabase
+            .from("deposits")
+            .select("revenue_id")
+            .eq("id", match.deposit_id)
+            .maybeSingle();
+          if (current?.revenue_id !== match.revenue_id) {
+            await supabase
+              .from("revenues")
+              .update({ is_paid: false, paid_date: null })
+              .eq("id", match.revenue_id)
+              .eq("is_paid", true)
+              .eq("paid_date", match.deposit_date);
+          }
         })
       );
     }
@@ -325,12 +367,13 @@ export async function POST() {
       }
     });
 
-    const aiSuggestions = aiResults.filter(
-      (r): r is AiMatchResult => r !== null
-    );
+    const aiSuggestions = [
+      ...nameOnlySuggestions,
+      ...aiResults.filter((r): r is AiMatchResult => r !== null),
+    ];
 
     const matchedIds = new Set<string>([
-      ...autoMatched.map((m) => m.deposit_id),
+      ...confirmedAuto.map((m) => m.deposit_id),
       ...aiSuggestions.map((s) => s.deposit_id),
     ]);
     const unmatched: UnmatchedDeposit[] = pendingDeposits
@@ -344,13 +387,13 @@ export async function POST() {
 
     logInfo(
       "AI_MATCH_DEPOSITS_BATCH",
-      `입금 일괄 매칭: 자동 ${autoMatched.length}건 / AI 후보 ${aiSuggestions.length}건 / 미매칭 ${unmatched.length}건`,
+      `입금 일괄 매칭: 자동 ${confirmedAuto.length}건 / AI 후보 ${aiSuggestions.length}건 / 미매칭 ${unmatched.length}건`,
       {
         resource: "deposit",
         actor_id: user.id,
         details: {
           total: pendingDeposits.length,
-          auto: autoMatched.length,
+          auto: confirmedAuto.length,
           ai: aiSuggestions.length,
           unmatched: unmatched.length,
         },
@@ -359,12 +402,12 @@ export async function POST() {
 
     return NextResponse.json({
       ok: true,
-      auto_matched: autoMatched,
+      auto_matched: confirmedAuto,
       ai_suggestions: aiSuggestions,
       unmatched,
       stats: {
         total: pendingDeposits.length,
-        auto: autoMatched.length,
+        auto: confirmedAuto.length,
         ai: aiSuggestions.length,
         unmatched: unmatched.length,
       },

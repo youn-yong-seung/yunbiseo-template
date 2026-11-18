@@ -20,6 +20,7 @@ export interface IssuedApiKey {
  * 키 주인은 employee_id 로 묶는다. created_by(이름)는 표시용이다.
  * DB 에는 sha256 해시와 앞 12자(key_prefix)만 저장한다. 원문은 되살릴 수 없으므로, 잃어버리면 지우고 새로 만든다.
  * supabase 는 service role 클라이언트여야 한다(api_keys 는 브라우저 정책이 없다).
+ * 만료일은 필수다(DB 제약 api_keys_expires_required).
  */
 export async function issueApiKey(
   supabase: SupabaseClient,
@@ -27,8 +28,8 @@ export async function issueApiKey(
     name,
     employeeId,
     employeeName,
-    expiresAt = null,
-  }: { name: string; employeeId: string; employeeName: string; expiresAt?: string | null }
+    expiresAt,
+  }: { name: string; employeeId: string; employeeName: string; expiresAt: string }
 ): Promise<IssuedApiKey> {
   const rawKey = generateApiKey();
   const keyHash = hashApiKey(rawKey);

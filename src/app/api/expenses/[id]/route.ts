@@ -7,6 +7,7 @@ import { forbiddenResponse } from "@/lib/route-auth";
 // 승인·지급 예정·지급완료·취소된 매입은 관리자·재무만 고치거나 지운다(DB 트리거 guard_expense_write 와 같은 기준).
 // 지급일(payment_date)도 관리자·재무만 넣는다(목록에서 지급완료로 보이는 칸).
 const LOCKED_STATUSES = ["approved", "scheduled", "paid", "cancelled"];
+const NOT_OWNER_MESSAGE = "다른 직원이 결재 요청한 매입은 요청한 사람이나 관리자·재무 담당만 고치거나 지울 수 있습니다.";
 import { logInfo } from "@/lib/logger";
 import { calcWithholding } from "@/lib/expenses/tax";
 import type { VendorTaxCategory } from "@/lib/types";
@@ -94,9 +95,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const body = (await request.json().catch(() => null)) ?? {};
     const privileged = apiKey.employee.isAdmin || apiKey.employee.is_finance;
     if (!privileged) {
-      const { data: current } = await createAdminClient().from("expenses").select("status").eq("id", id).maybeSingle();
+      const { data: current } = await createAdminClient().from("expenses").select("status, requested_by").eq("id", id).maybeSingle();
       if (current && LOCKED_STATUSES.includes(current.status as string)) {
         return forbiddenResponse("승인·지급·취소된 매입은 관리자 또는 재무 담당만 고치거나 지울 수 있습니다.");
+      }
+      // 결재를 요청한 사람이 있는 건은 그 사람(키 주인)만. 요청 전 작성중 건은 요청자 기록이 없어 누구나.
+      if (current?.requested_by && current.requested_by !== apiKey.employee.id) {
+        return forbiddenResponse(NOT_OWNER_MESSAGE);
       }
       if (body.payment_date !== undefined || body.paid_date !== undefined) {
         return forbiddenResponse("지급일은 관리자 또는 재무 담당만 넣을 수 있습니다.");
@@ -330,7 +335,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     let updateQuery = supabase.from("expenses").update(update).eq("id", id);
     // 관리자·재무가 아니면 "잠기지 않은 상태일 때만" 바꾼다. 위에서 상태를 읽은 뒤 승인돼도 이 조건에서 0행이 된다.
-    if (!privileged) updateQuery = updateQuery.not("status", "in", `(${LOCKED_STATUSES.join(",")})`);
+    if (!privileged) {
+      updateQuery = updateQuery
+        .not("status", "in", `(${LOCKED_STATUSES.join(",")})`)
+        .or(`requested_by.is.null,requested_by.eq.${apiKey.employee.id}`);
+    }
     const { data, error } = await updateQuery.select(SELECT_COLUMNS).maybeSingle();
 
     if (error) {
@@ -370,9 +379,13 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     const { id } = await context.params;
     const privileged = apiKey.employee.isAdmin || apiKey.employee.is_finance;
     if (!privileged) {
-      const { data: current } = await createAdminClient().from("expenses").select("status").eq("id", id).maybeSingle();
+      const { data: current } = await createAdminClient().from("expenses").select("status, requested_by").eq("id", id).maybeSingle();
       if (current && LOCKED_STATUSES.includes(current.status as string)) {
         return forbiddenResponse("승인·지급·취소된 매입은 관리자 또는 재무 담당만 고치거나 지울 수 있습니다.");
+      }
+      // 결재를 요청한 사람이 있는 건은 그 사람(키 주인)만. 요청 전 작성중 건은 요청자 기록이 없어 누구나.
+      if (current?.requested_by && current.requested_by !== apiKey.employee.id) {
+        return forbiddenResponse(NOT_OWNER_MESSAGE);
       }
     }
     const supabase = createAdminClient();
@@ -388,7 +401,11 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     }
 
     let deleteQuery = supabase.from("expenses").delete().eq("id", id);
-    if (!privileged) deleteQuery = deleteQuery.not("status", "in", `(${LOCKED_STATUSES.join(",")})`);
+    if (!privileged) {
+      deleteQuery = deleteQuery
+        .not("status", "in", `(${LOCKED_STATUSES.join(",")})`)
+        .or(`requested_by.is.null,requested_by.eq.${apiKey.employee.id}`);
+    }
     const { data: deleted, error } = await deleteQuery.select("id");
 
     if (error) {

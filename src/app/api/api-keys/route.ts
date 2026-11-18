@@ -9,7 +9,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * - 일반 직원: 자기 키만 본다.
  * - 관리자: 모든 직원의 키를 본다(폐기용). 키 원문은 누구도 다시 볼 수 없다(발급할 때 한 번만 보여 준다).
  * - 새 키는 항상 로그인한 본인 키로 만든다. 다른 직원 명의로 만들 수 없다.
+ * - 모든 키에는 만료일이 있다(expires_in_days: 30·90·180·365, 기본 90일). 만료되면 새로 만든다.
  */
+const KEY_LIFETIME_DAYS = [30, 90, 180, 365] as const;
+const DEFAULT_KEY_LIFETIME_DAYS = 90;
 export async function GET(request: NextRequest) {
   try {
     const { user, employee, authUnavailable } = await requireRouteUser();
@@ -64,12 +67,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "'yb-cli' 로 시작하는 이름은 쓸 수 없습니다. 다른 이름을 지어 주세요." }, { status: 400 });
     }
 
+    const requestedDays = body?.expires_in_days === undefined || body?.expires_in_days === null
+      ? DEFAULT_KEY_LIFETIME_DAYS
+      : Number(body.expires_in_days);
+    if (!(KEY_LIFETIME_DAYS as readonly number[]).includes(requestedDays)) {
+      return NextResponse.json(
+        { error: `expires_in_days 는 ${KEY_LIFETIME_DAYS.join("·")} 중 하나여야 합니다.` },
+        { status: 400 }
+      );
+    }
+    const expiresAt = new Date(Date.now() + requestedDays * 86_400_000).toISOString();
+
     let issued;
     try {
       issued = await issueApiKey(createAdminClient(), {
         name,
         employeeId: employee.id,
         employeeName: employee.name,
+        expiresAt,
       });
     } catch {
       return NextResponse.json({ error: "API 키 생성에 실패했습니다." }, { status: 500 });

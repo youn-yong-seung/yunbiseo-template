@@ -141,6 +141,22 @@
 
 ---
 
+## 🔄 템플릿 업데이트 도우미
+
+**트리거:** "템플릿 업데이트 받아줘", "새 버전 받아줘", "업데이트해줘" → 아래 순서대로 네가 직접 실행한다.
+
+1. `git status` 로 고치던 파일이 없는지 본다. 있으면 먼저 커밋할지 사용자에게 묻는다.
+2. `git pull template main` (원본 템플릿 리모트 이름이 `template` 이 아니면 `git remote -v` 로 확인). 충돌이 나면 멈추고 어떤 파일인지 알려 준다.
+3. `npm install`
+4. `supabase db push --yes` — 새 마이그레이션(테이블·보안 규칙)을 적용한다. 빼먹으면 새 메뉴가 "불러오지 못했습니다" 로 뜬다.
+5. `git diff HEAD@{1} -- .env.example` 로 새로 생긴 설정을 확인하고, 필요한 것만 사용자에게 설명한 뒤 `.env.local` 에 넣는다
+   (값이 비밀이면 사용자가 직접 넣게 한다). 배포했다면 Vercel 환경변수에도 넣는다.
+   - 예: `TRUSTED_PROXY_HOPS` — Vercel 이 아닌 곳에 프록시(nginx 등)를 두고 올렸을 때만 1. Vercel·로컬은 비워 둔다.
+6. `SETUP.md` "템플릿 업데이트 받기" 아래의 최신 안내(달라지는 점)를 사용자에게 짧게 전한다.
+7. Vercel 에 배포했다면 `vercel --prod` 로 다시 배포한다(사용자 확인 후).
+
+---
+
 ## 🚀 배포 도우미 (Vercel)
 
 **트리거:** "배포해줘", "배포하고 싶어", "vercel 배포", "인터넷에 올려줘", `/deploy` → 아래 절차를 진행한다.
@@ -282,6 +298,10 @@
   `createAdminClient()`(service role, RLS 우회)는 그 확인을 통과한 뒤에만 쓴다.
 - 새 테이블은 같은 사이클에서 RLS 를 켜고 정책을 만든다(`public.is_active_employee()` 등 판정 함수 사용). anon 에는 권한을 주지 않는다.
 - cron·웹훅은 비밀이 없으면 거부한다(`verifyCronSecret`). 응답에 DB 오류 원문을 싣지 않는다(`publicErrorMessage`, `dbError`).
+- 돈이 오가는 처리(세금계산서 발행·강제 취소, 매입 승인·지급, 거래처 계좌 변경)는 `canManageFinance`(관리자·재무)로 막고,
+  같은 규칙을 DB 트리거에도 둔다(브라우저가 Supabase 에 직접 쓰는 길). API 키는 키 주인 직원의 권한으로 본다.
+- 상태를 바꾸는 update 는 "읽은 상태일 때만"(`.eq("status", 읽은값)` 등) 조건을 걸고 0행이면 409 로 돌려준다(동시 요청 경합).
+- 메일 머리글(받는 사람·제목 등)에 들어가는 값은 줄바꿈을 거부한다. 접속 IP 는 `clientIp`(`TRUSTED_PROXY_HOPS`)로만 읽는다.
 
 > 회사 정보(상호/대표자/사업자번호/계좌)는 비어 있다. 견적서를 쓰려면
 > `src/lib/quotation-constants.ts` 에서 값을 채운다.

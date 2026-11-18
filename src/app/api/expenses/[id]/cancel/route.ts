@@ -3,7 +3,7 @@ import { appUrl } from "@/lib/app-url";
 import { publicErrorMessage } from "@/lib/safe-error";
 
 import { createRouteAuthErrorResponse, requireRouteUser } from "@/lib/route-auth";
-import { STATUS_CHANGED_MESSAGE, cancelExpense, resolveActorEmployee } from "@/lib/expense-mutations";
+import { NOT_OWNER_MESSAGE, STATUS_CHANGED_MESSAGE, cancelExpense, resolveActorEmployee } from "@/lib/expense-mutations";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -29,11 +29,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
       actorId,
       actorName,
       expenseUrl: resolveExpenseUrl(request, id),
+      // 관리자·재무가 아니면 본인이 결재 요청한 건(또는 요청 전 작성중 건)만 취소한다.
+      ...(privileged ? {} : { ownerEmployeeId: employee.id }),
     }, privileged ? undefined : (["draft", "requested", "rejected"] as const));
     return NextResponse.json({ success: true, data });
   } catch (error) {
     const message = publicErrorMessage(error, "지출 취소에 실패했습니다.");
-    const status = message.startsWith("승인·지급된 매입의 취소는") ? 403 : message === STATUS_CHANGED_MESSAGE ? 409 : 400;
+    const status =
+      message.startsWith("승인·지급된 매입의 취소는") || message === NOT_OWNER_MESSAGE
+        ? 403
+        : message === STATUS_CHANGED_MESSAGE
+          ? 409
+          : 400;
     return NextResponse.json({ error: message }, { status });
   }
 }

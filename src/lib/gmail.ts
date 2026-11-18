@@ -309,6 +309,11 @@ export async function sendEmail(
   options: { to: string; subject: string; body: string; replyToMessageId?: string; threadId?: string },
   tokenOptions?: { onTokenRefreshed?: (newAccessToken: string, newExpiry: number) => void }
 ) {
+  // 머리글 주입 방지: 머리글로 들어가는 값에 줄바꿈이 있으면 보내지 않는다(라우트에서도 400 으로 막는다).
+  for (const value of [options.to, options.subject, options.replyToMessageId, options.threadId]) {
+    if (value && /[\r\n\0]/.test(value)) throw new Error("메일 머리글 값에 줄바꿈을 넣을 수 없습니다.");
+  }
+
   const gmail = await getGmailClient(accessToken, refreshToken, expiryDate, tokenOptions);
 
   const headers = [
